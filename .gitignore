@@ -1,0 +1,5 @@
+/idpdbg
+/sp-metadata.xml
+/dist
+testdata/samba/run/
+testdata/mitkdc/run/

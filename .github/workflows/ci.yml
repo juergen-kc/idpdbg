@@ -1,0 +1,145 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install pcsc-lite (card read needs it with cgo)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcsclite-dev
+      - name: gofmt
+        if: runner.os != 'Windows'
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - name: test (race detector)
+        if: runner.os != 'Windows'
+        run: go test -race -count=1 ./...
+      - name: test
+        if: runner.os == 'Windows'
+        run: go test -count=1 ./...
+
+  nocgo:
+    name: build and test without cgo
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go test -count=1 ./...
+
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcsclite-dev
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  release-build:
+    name: release build dry run
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: scripts/build-release.sh dev
+
+  interop:
+    name: interop with Keycloak
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Start Keycloak
+        run: scripts/keycloak.sh
+      - name: Run idpdbg against it
+        run: go test -tags interop -count=1 -run Keycloak -v .
+      - name: Keycloak log
+        if: failure()
+        run: docker logs idpdbg-keycloak 2>&1 | tail -200
+
+  interop-samba:
+    name: interop with Samba AD
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Start a Samba AD domain controller
+        run: scripts/samba.sh
+      - name: Run idpdbg against it
+        run: go test -tags interop -count=1 -run Samba -v .
+      - name: Samba log
+        if: failure()
+        run: docker logs idpdbg-samba 2>&1 | tail -200
+
+  interop-scim:
+    name: interop with a SCIM server
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Start i2scim
+        run: scripts/scim.sh
+      - name: Run idpdbg against it
+        run: go test -tags interop -count=1 -run SCIM -v .
+      - name: i2scim log
+        if: failure()
+        run: docker logs idpdbg-scim 2>&1 | tail -200
+
+  interop-mit:
+    name: interop with an MIT KDC
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Start an MIT Kerberos KDC
+        run: scripts/mitkdc.sh
+      - name: Run idpdbg against it
+        run: go test -tags interop -count=1 -run MIT -v .
+      - name: KDC log
+        if: failure()
+        run: docker logs idpdbg-mitkdc 2>&1 | tail -200

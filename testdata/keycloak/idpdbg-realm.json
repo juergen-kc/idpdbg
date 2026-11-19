@@ -1,0 +1,296 @@
+{
+  "realm": "idpdbg",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 600,
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Interop",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-interop-pw",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-idpdbg"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "idpdbg-web",
+      "name": "idpdbg confidential client",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "idpdbg-interop-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "consentRequired": false,
+      "redirectUris": [
+        "http://localhost:8765/callback"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8765/*",
+        "oauth2.device.authorization.grant.enabled": "true",
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "organization"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience idpdbg-web",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "idpdbg-web",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "idpdbg-pkj",
+      "name": "idpdbg private_key_jwt client",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-jwt",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "consentRequired": false,
+      "redirectUris": [
+        "http://localhost:8765/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "use.jwks.string": "true",
+        "jwks.string": "{\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"pkj-1\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"rEQuoh4MUfoWFB9zztXdhccNIhCEm4Jt6XMDTf3ksZ8\",\"y\":\"HYKDCfHIAHSY9MZDAN5SwS5atz3PvF21xSHlxa706dM\"}]}",
+        "token.endpoint.auth.signing.alg": "ES256",
+        "request.object.signature.alg": "ES256",
+        "request.object.required": "not required"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "organization"
+      ]
+    },
+    {
+      "clientId": "idpdbg",
+      "name": "idpdbg SAML service provider",
+      "protocol": "saml",
+      "enabled": true,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:8766/*"
+      ],
+      "attributes": {
+        "saml_assertion_consumer_url_post": "http://localhost:8766/saml/acs",
+        "saml_single_logout_service_url_redirect": "http://localhost:8766/saml/slo",
+        "saml.server.signature": "true",
+        "saml.assertion.signature": "true",
+        "saml.client.signature": "false",
+        "saml.authnstatement": "true",
+        "saml_name_id_format": "username",
+        "saml.signature.algorithm": "RSA_SHA256"
+      }
+    },
+    {
+      "clientId": "idpdbg-signed",
+      "name": "idpdbg SAML SP with signed requests and encrypted assertions",
+      "protocol": "saml",
+      "enabled": true,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:8766/*"
+      ],
+      "attributes": {
+        "saml_assertion_consumer_url_post": "http://localhost:8766/saml/acs",
+        "saml_single_logout_service_url_redirect": "http://localhost:8766/saml/slo",
+        "saml.server.signature": "true",
+        "saml.assertion.signature": "true",
+        "saml.client.signature": "true",
+        "saml.signing.certificate": "MIIC8DCCAdigAwIBAgIULHpiL3XHZxLp7xDjo2Y2WYB7SDcwDQYJKoZIhvcNAQELBQAwGDEWMBQGA1UEAwwNaWRwZGJnLXNpZ25lZDAeFw0yNjExMTkxNTI2NDdaFw0zNjExMTYxNTI2NDdaMBgxFjAUBgNVBAMMDWlkcGRiZy1zaWduZWQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCZgYvuiwQJ2aeWhIwC9FLwDIK9XlAsayZGpTgsnUX88tFZnsslJ7t9XZjGmTnReGC6megw2w3WLv5iaA+MqXtQ+m71Gq0PjG9IZSocOFakYi+GH0CTk4BEWeSxT/Tkc7wI8FqULPyu3r5LlvAj2aVptc4sQtMzSVjAXPwaB4fD0GqaLkdYui1i6nBcAq4Ij6Lxb7MfiyAKZDzeiB+Jb/a7SD/rVZe7TnlK4i6xAO3uvCyeyb2Z0eIqEL+IhF+zM8UWd7yaGso+Dc8SZ8iHCAtwFLXFrH1spmNJuxZ9qGFj7EgZ+BunEpylV7AlxgDw3ndH05dLZzCE8A3BtTQbh2HTAgMBAAGjMjAwMB0GA1UdDgQWBBSZVaZ4W9HzFyHNztYa42sgqOPvNzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQBwflIxkadn9RritZQKulAfZgE/WGqf5VlYZrKdxAFp8lNCYtYUOjak5z4mMvT1cIxSkG/qRFQdB3AaQA1KLIYbT2n0nwxoS+5OGCPuQJPP2H81LoY0dTDzc9TPILaFEARmQOkDDOKSZty3ZRh4VCnf1yCknI7m25yHawWB/l2Q94A73+pRF13dq71mPOqgLAYimnWbyXDRMPqZqWs0zOSXiGFq2IhHZumt0F+WUSLWujhwaMlLFXxuVyDasqmLuMRUNbKs9j3kMpTdo6ghH1g9MaUM5wbH1eVNDt3JpUa6ItGN0d/ILsyVS8EoJvuGWkaNP55SFtG9lGN/Jv++Bm0V",
+        "saml.encrypt": "true",
+        "saml.encryption.certificate": "MIIC8DCCAdigAwIBAgIULHpiL3XHZxLp7xDjo2Y2WYB7SDcwDQYJKoZIhvcNAQELBQAwGDEWMBQGA1UEAwwNaWRwZGJnLXNpZ25lZDAeFw0yNjExMTkxNTI2NDdaFw0zNjExMTYxNTI2NDdaMBgxFjAUBgNVBAMMDWlkcGRiZy1zaWduZWQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCZgYvuiwQJ2aeWhIwC9FLwDIK9XlAsayZGpTgsnUX88tFZnsslJ7t9XZjGmTnReGC6megw2w3WLv5iaA+MqXtQ+m71Gq0PjG9IZSocOFakYi+GH0CTk4BEWeSxT/Tkc7wI8FqULPyu3r5LlvAj2aVptc4sQtMzSVjAXPwaB4fD0GqaLkdYui1i6nBcAq4Ij6Lxb7MfiyAKZDzeiB+Jb/a7SD/rVZe7TnlK4i6xAO3uvCyeyb2Z0eIqEL+IhF+zM8UWd7yaGso+Dc8SZ8iHCAtwFLXFrH1spmNJuxZ9qGFj7EgZ+BunEpylV7AlxgDw3ndH05dLZzCE8A3BtTQbh2HTAgMBAAGjMjAwMB0GA1UdDgQWBBSZVaZ4W9HzFyHNztYa42sgqOPvNzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQBwflIxkadn9RritZQKulAfZgE/WGqf5VlYZrKdxAFp8lNCYtYUOjak5z4mMvT1cIxSkG/qRFQdB3AaQA1KLIYbT2n0nwxoS+5OGCPuQJPP2H81LoY0dTDzc9TPILaFEARmQOkDDOKSZty3ZRh4VCnf1yCknI7m25yHawWB/l2Q94A73+pRF13dq71mPOqgLAYimnWbyXDRMPqZqWs0zOSXiGFq2IhHZumt0F+WUSLWujhwaMlLFXxuVyDasqmLuMRUNbKs9j3kMpTdo6ghH1g9MaUM5wbH1eVNDt3JpUa6ItGN0d/ILsyVS8EoJvuGWkaNP55SFtG9lGN/Jv++Bm0V",
+        "saml.encryption.algorithm": "http://www.w3.org/2009/xmlenc11#aes256-gcm",
+        "saml.encryption.keyAlgorithm": "http://www.w3.org/2009/xmlenc11#rsa-oaep",
+        "saml.encryption.digestMethod": "http://www.w3.org/2001/04/xmlenc#sha256",
+        "saml.authnstatement": "true",
+        "saml_name_id_format": "username",
+        "saml.signature.algorithm": "RSA_SHA256"
+      }
+    },
+    {
+      "clientId": "idpdbg-fapi",
+      "name": "idpdbg FAPI 2.0 client (DPoP)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-jwt",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [
+        "https://localhost:8765/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "require.pushed.authorization.requests": "true",
+        "dpop.bound.access.tokens": "true",
+        "use.jwks.string": "true",
+        "jwks.string": "{\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"pkj-1\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"rEQuoh4MUfoWFB9zztXdhccNIhCEm4Jt6XMDTf3ksZ8\",\"y\":\"HYKDCfHIAHSY9MZDAN5SwS5atz3PvF21xSHlxa706dM\"}]}",
+        "token.endpoint.auth.signing.alg": "ES256",
+        "id.token.signed.response.alg": "ES256",
+        "access.token.signed.response.alg": "ES256",
+        "use.refresh.tokens": "true"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience api.idpdbg.test",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "https://api.idpdbg.test",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "client": {
+      "idpdbg-fapi": [
+        {
+          "name": "fapi-2",
+          "description": "Clients that follow the FAPI 2.0 Security Profile"
+        }
+      ]
+    }
+  },
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "idpdbg-fapi-2",
+        "description": "FAPI 2.0 with DPoP for clients with the fapi-2 role",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-roles",
+            "configuration": {
+              "roles": [
+                "fapi-2"
+              ]
+            }
+          }
+        ],
+        "profiles": [
+          "fapi-2-dpop-security-profile"
+        ]
+      }
+    ]
+  },
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "ecdsa-p256",
+        "providerId": "ecdsa-generated",
+        "subComponents": {},
+        "config": {
+          "priority": [
+            "100"
+          ],
+          "ecdsaEllipticCurveKey": [
+            "P-256"
+          ]
+        }
+      },
+      {
+        "name": "rsa-generated",
+        "providerId": "rsa-generated",
+        "subComponents": {},
+        "config": {
+          "priority": [
+            "100"
+          ],
+          "keySize": [
+            "2048"
+          ]
+        }
+      },
+      {
+        "name": "hmac-generated",
+        "providerId": "hmac-generated",
+        "subComponents": {},
+        "config": {
+          "priority": [
+            "100"
+          ],
+          "algorithm": [
+            "HS512"
+          ]
+        }
+      },
+      {
+        "name": "aes-generated",
+        "providerId": "aes-generated",
+        "subComponents": {},
+        "config": {
+          "priority": [
+            "100"
+          ]
+        }
+      }
+    ]
+  }
+}

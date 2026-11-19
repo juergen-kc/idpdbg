@@ -1,0 +1,14 @@
+# gitleaks configuration: the default rules, minus known test fixtures for
+# the throwaway servers the interop tests start (see SECURITY.md).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Interop and unit test fixtures"
+paths = [
+  '''^testdata/''',
+]
+regexes = [
+  '''00112233445566778899aabbccddeeff''',  # sequential test AES key (otp_test.go)
+  '''admin:idpdbg-interop''',             # i2scim fixture login (scripts/scim.sh)
+]
