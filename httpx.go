@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -246,12 +247,10 @@ func flatHeaders(h http.Header, redact bool) map[string]string {
 
 func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	ex := &Exchange{Method: req.Method, URL: req.URL.String(), RequestHeaders: flatHeaders(req.Header, true)}
-	if r.withholdResponses && (req.URL.RawQuery != "" || req.URL.Fragment != "") {
+	if r.withholdResponses {
 		// A request after a withheld answer may follow a redirect that
-		// carries a session in its URL.
-		u := *req.URL
-		u.RawQuery, u.Fragment = "", ""
-		ex.URL = u.String() + " [query withheld]"
+		// carries a session anywhere in its URL: keep only the origin.
+		ex.URL = req.URL.Scheme + "://" + req.URL.Host + "/[withheld]"
 	}
 	if req.Body != nil {
 		b, _ := io.ReadAll(req.Body)
@@ -294,8 +293,10 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		if r.withholdResponses {
 			// Only the shape: any header value (Location, cookies, custom
 			// token headers) or the body may hold a session.
-			for k := range ex.ResponseHeaders {
-				if !strings.EqualFold(k, "Content-Type") {
+			for k, v := range ex.ResponseHeaders {
+				if mt, _, err := mime.ParseMediaType(v); strings.EqualFold(k, "Content-Type") && err == nil {
+					ex.ResponseHeaders[k] = mt
+				} else {
 					ex.ResponseHeaders[k] = "[withheld]"
 				}
 			}
