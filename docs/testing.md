@@ -77,6 +77,9 @@ is in [development.md](development.md#interop-tests).
 
 ## Not covered (yet)
 
+The [roadmap](../ROADMAP.md) says which of these are planned, and in which
+order.
+
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
 profiles and IdP-initiated logout; WS-Trust renew/cancel, proof-of-possession
 keys and encrypted WS-* tokens; OID4VCI authorization-code issuance, mdoc

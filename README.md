@@ -148,7 +148,8 @@ What each group covers:
 
 ## More
 
-- [Tested against real systems, and what isn't covered](docs/testing.md)
+- [Tested against real systems, and what isn't covered](docs/testing.md), and
+  the [roadmap](ROADMAP.md) for what comes next
 - [Development](docs/development.md): building, tests, interop tests, releases
   and the source layout
 - [CHANGELOG.md](CHANGELOG.md): what changed in each release

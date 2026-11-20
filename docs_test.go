@@ -290,7 +290,7 @@ func TestChangelog(t *testing.T) {
 // TestDocLinks checks that every relative link in the README, the
 // changelog and the hand-written docs points at a file that exists.
 func TestDocLinks(t *testing.T) {
-	files := []string{"README.md", "CHANGELOG.md", "SECURITY.md"}
+	files := []string{"README.md", "CHANGELOG.md", "SECURITY.md", "ROADMAP.md"}
 	for _, pattern := range []string{"docs/*.md", "docs/howto/*.md"} {
 		more, _ := filepath.Glob(filepath.FromSlash(pattern))
 		files = append(files, more...)

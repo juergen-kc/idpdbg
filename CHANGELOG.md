@@ -14,6 +14,10 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- [ROADMAP.md](ROADMAP.md): what is planned next of the features not covered
+  yet, in which order, and how each will be tested.
+
 ## [0.24.0] - 2026-11-19
 
 ### Added
