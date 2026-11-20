@@ -56,6 +56,9 @@ func TestLocalhostKeyResponseStaysLocal(t *testing.T) {
 func TestWithheldKeyResponseHidesTheAnswer(t *testing.T) {
 	rp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "session", Value: "account-session"})
+		w.Header().Set("Location", "/app?session=account-location")
+		w.Header().Set("X-Auth-Token", "account-header")
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok","session_token":"account-token"}`))
 	}))
 	defer rp.Close()
@@ -67,11 +70,17 @@ func TestWithheldKeyResponseHidesTheAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := c.do("GET", rp.URL+"/next?code=account-query", nil, nil); err != nil {
+		t.Fatal(err)
+	}
 	shown, _ := json.Marshal(M{"server_response": serverResponse(out, res), "trace": c.Rec.Items})
-	for _, leak := range []string{"account-session", "account-token"} {
+	for _, leak := range []string{"account-session", "account-token", "account-location", "account-header", "account-query"} {
 		if strings.Contains(string(shown), leak) {
 			t.Errorf("%q reached the result or trace: %s", leak, shown)
 		}
+	}
+	if !strings.Contains(string(shown), "application/json") {
+		t.Errorf("the Content-Type should still be shown")
 	}
 }
 

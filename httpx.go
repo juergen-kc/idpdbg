@@ -246,6 +246,13 @@ func flatHeaders(h http.Header, redact bool) map[string]string {
 
 func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	ex := &Exchange{Method: req.Method, URL: req.URL.String(), RequestHeaders: flatHeaders(req.Header, true)}
+	if r.withholdResponses && (req.URL.RawQuery != "" || req.URL.Fragment != "") {
+		// A request after a withheld answer may follow a redirect that
+		// carries a session in its URL.
+		u := *req.URL
+		u.RawQuery, u.Fragment = "", ""
+		ex.URL = u.String() + " [query withheld]"
+	}
 	if req.Body != nil {
 		b, _ := io.ReadAll(req.Body)
 		req.Body.Close()
@@ -285,7 +292,13 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		ex.ResponseHeaders = flatHeaders(resp.Header, false)
 		ex.ResponseBody = string(b)
 		if r.withholdResponses {
-			delete(ex.ResponseHeaders, "Set-Cookie")
+			// Only the shape: any header value (Location, cookies, custom
+			// token headers) or the body may hold a session.
+			for k := range ex.ResponseHeaders {
+				if !strings.EqualFold(k, "Content-Type") {
+					ex.ResponseHeaders[k] = "[withheld]"
+				}
+			}
 			if len(b) > 0 {
 				ex.ResponseBody = "[withheld over MCP: answer to a real security key's response]"
 			}
