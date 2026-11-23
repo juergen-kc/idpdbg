@@ -16,8 +16,6 @@ item up.
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| CRL distribution points over LDAP | AD CS publishes `ldap://` CRL locations by default, so CRL checks skip many Active Directory certificates today | M | OpenLDAP container in CI with a published CRL |
-| Merging delta CRLs | Completes the CRL support; AD CS issues delta CRLs | S | Test CA in the unit tests |
 | Encrypted WS-Trust and WS-Federation tokens | AD FS commonly encrypts tokens for relying parties; reuses the SAML decryption code | S–M | Mock STS in the unit tests |
 | FAST armored by anonymous PKINIT | The usual way to get FAST armor without a machine account; builds on the PKINIT support | M | MIT KDC in CI |
 | IdP-initiated SAML logout | Receive and answer the IdP's LogoutRequest; logout is a frequent source of bugs | S–M | Keycloak in CI |

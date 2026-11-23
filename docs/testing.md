@@ -44,7 +44,12 @@ is in [development.md](development.md#interop-tests).
   - FAST;
   - TLS on LDAPS, LDAP over LDAPS and StartTLS: binds, decoded attributes,
     password change, wrong-password and reset, and add, modify, compare,
-    rename and delete.
+    rename and delete;
+  - CRLs read from the directory: a base and a delta CRL published where
+    Active Directory Certificate Services puts them (`CN=CDP,CN=Public Key
+    Services` in the configuration partition), found through a host-less
+    `ldap:///` location and read as an ordinary user
+    (`interop_samba_crl_test.go`).
 
   Where Samba differs from Active Directory:
   - It makes S4U2Self evidence forwardable only for accounts trusted for
@@ -87,5 +92,4 @@ credentials and the Digital Credentials API; for the software authenticator, att
 on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,
 PUKs or management keys, and secure messaging; FAST with anonymous PKINIT or cross-realm armor, and FAST factors other than encrypted challenge; the SPIRE Server API; XACML AttributeSelector (XPath) and ALFA;
-post-quantum certificates; LDAP CRL distribution points, indirect CRLs and
-merging delta CRLs.
+post-quantum certificates; indirect CRLs.

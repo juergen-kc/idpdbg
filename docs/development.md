@@ -91,6 +91,7 @@ behind, so run it after changing an operation.
 | `card.go`, `card_read.go`, `card_pcsc*.go` | BER-TLV, APDUs, PIV and OpenPGP card objects; reading cards over PC/SC (cgo) |
 | `card_piv.go` | PIV key generation, certificate import and signing on a card (PIN and management key handling) |
 | `ocsp.go`, `crl.go` | OCSP requests and response validation; CRL download and validation |
+| `crl_ldap.go` | CRLs from ldap(s) distribution points; delta CRLs |
 | `pki.go`, `tlsprobe.go` | X.509 decoding, chain verification, a test CA; the TLS probe |
 | `*_test.go` | Tests: mock OpenID providers (one strict about PAR/JAR/DPoP/private_key_jwt), mock SAML IdPs for SLO and artifacts, an in-process LDAP server, a mock SCIM server, an emulated PIV/OpenPGP token, an emulated CTAP2/U2F security key, an MCP client; `IDPDBG_HW_TEST=1` also runs WebAuthn with a real key (touch needed); `interop_*_test.go` (build tag `interop`) run against Keycloak (with a scripted browser), a Samba AD domain controller, an MIT KDC and i2scim |
 | `mcp.go` | MCP stdio server |

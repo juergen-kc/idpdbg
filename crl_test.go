@@ -197,9 +197,9 @@ func TestCRL(t *testing.T) {
 		t.Errorf("loopback CRL fetched: %v", r)
 	}
 
-	// No http CRL named: said plainly.
+	// No fetchable CRL named: said plainly.
 	noCDP := mkCert(t, &x509.Certificate{SerialNumber: big.NewInt(11), Subject: pkix.Name{CommonName: "x"}, NotBefore: time.Now().Add(-time.Hour),
-		NotAfter: time.Now().Add(time.Hour), CRLDistributionPoints: []string{"ldap://dir.example/cn=crl"}}, p.ca, &p.leafKey.PublicKey, p.caKey)
+		NotAfter: time.Now().Add(time.Hour), CRLDistributionPoints: []string{"file:///etc/crl.der"}}, p.ca, &p.leafKey.PublicKey, p.caKey)
 	r = run(t, "pki.crl", M{"cert": pemOf(noCDP, p.ca)}, nil)
 	wantStatus(t, r, "CRL distribution point named", "info")
 	wantStatus(t, r, "CRL distribution point", "info")

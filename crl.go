@@ -133,7 +133,7 @@ func checkCRL(cs *Checks, prefix string, l *x509.RevocationList, cert, issuer *x
 			cs.add(prefix+"complete CRL", "fail", "this is a delta CRL; it only lists changes since a base CRL", "RFC 5280 §5.2.4")
 			scopeOK = false
 		case e.Id.Equal(oidFreshestCRL):
-			cs.add(prefix+"delta CRLs", "info", "the CA also publishes delta CRLs (freshestCRL); newer revocations may be listed there", "RFC 5280 §5.2.6")
+			cs.add(prefix+"delta CRLs", "info", "the CA also publishes delta CRLs (freshestCRL)", "RFC 5280 §5.2.6")
 		case e.Id.Equal(oidIssuingDistributionPoint):
 			idp, err := parseIDP(e.Value)
 			if err != nil {
@@ -185,19 +185,21 @@ func checkCRL(cs *Checks, prefix string, l *x509.RevocationList, cert, issuer *x
 	return out
 }
 
-// fetchCRLs downloads and checks the certificate's HTTP(S) CRLs (at most
-// two distribution points, public addresses only unless allowPrivate).
+// fetchCRLs downloads and checks the certificate's CRLs from http(s) and
+// ldap(s) distribution points (at most two, public addresses only unless
+// allowPrivate), with the delta CRL where the CA publishes one.
 func fetchCRLs(c *Ctx, cs *Checks, prefix string, cert, issuer *x509.Certificate, allowPrivate bool) []M {
 	var urls []string
 	for _, u := range cert.CRLDistributionPoints {
-		if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		switch scheme, _, _ := strings.Cut(strings.ToLower(u), "://"); scheme {
+		case "http", "https", "ldap", "ldaps":
 			urls = append(urls, u)
-		} else {
-			cs.add(prefix+"CRL distribution point", "info", "skipped "+u+" (only http and https are fetched)", "RFC 5280 §4.2.1.13")
+		default:
+			cs.add(prefix+"CRL distribution point", "info", "skipped "+u+" (only http, https, ldap and ldaps are fetched)", "RFC 5280 §4.2.1.13")
 		}
 	}
 	if len(urls) == 0 {
-		cs.add(prefix+"CRL distribution point named", "info", "the certificate names no http(s) CRL; check OCSP instead", "RFC 5280 §4.2.1.13")
+		cs.add(prefix+"CRL distribution point named", "info", "the certificate names no CRL location; check OCSP instead", "RFC 5280 §4.2.1.13")
 		return nil
 	}
 	if len(urls) > 2 {
@@ -205,20 +207,18 @@ func fetchCRLs(c *Ctx, cs *Checks, prefix string, cert, issuer *x509.Certificate
 	}
 	var out []M
 	for _, u := range urls {
-		res, err := c.doPublic(allowPrivate, "GET", u, nil, nil)
+		b, where, err := fetchCRLBytes(c, u, allowPrivate)
 		if err != nil {
 			cs.add(prefix+"CRL download", "fail", err.Error(), "RFC 5280 §4.2.1.13")
 			continue
 		}
-		if !cs.ok(res.Status == 200, prefix+"CRL download", fmt.Sprintf("HTTP %d from %s (%d bytes)", res.Status, u, len(res.Body)), "RFC 5280 §4.2.1.13") {
-			continue
-		}
-		l, err := parseCRLBytes(res.Body)
+		cs.add(prefix+"CRL download", "pass", where, "RFC 5280 §4.2.1.13")
+		l, err := parseCRLBytes(b)
 		if err != nil {
 			cs.add(prefix+"CRL parses", "fail", err.Error(), "RFC 5280 §5.1")
 			continue
 		}
-		out = append(out, checkCRL(cs, prefix, l, cert, issuer, u))
+		out = append(out, checkCRLWithDelta(c, cs, prefix, l, cert, issuer, u, allowPrivate))
 		// One complete, valid CRL that covers the certificate answers it.
 		if r := out[len(out)-1]["cert_status"]; r == "good" || r == "revoked" {
 			break
@@ -258,7 +258,7 @@ func runCRL(c *Ctx) (M, error) {
 		if err != nil {
 			return nil, fmt.Errorf("crl: %w", err)
 		}
-		crls = []M{checkCRL(&cs, "", l, cert, issuer, "")}
+		crls = []M{checkCRLWithDelta(c, &cs, "", l, cert, issuer, "", allowPrivate)}
 		out["source"] = "supplied CRL"
 	} else {
 		crls = fetchCRLs(c, &cs, "", cert, issuer, allowPrivate)
@@ -278,12 +278,18 @@ func runCRL(c *Ctx) (M, error) {
 func init() {
 	register(&Op{
 		Name: "pki.crl",
-		Summary: "Check a certificate's revocation status against its CRL (RFC 5280): finds the issuer, downloads the CRL from the certificate's distribution points (or takes a supplied one), and checks the CRL's issuer and signature, freshness, scope (delta CRLs, and issuingDistributionPoint shards: only CA or end-entity certificates, some reasons, the URL it was fetched from), then whether the serial is listed, with time and reason. " +
+		Summary: "Check a certificate's revocation status against its CRL (RFC 5280): finds the issuer, downloads the CRL from the certificate's distribution points over http(s) or from a directory over ldap(s) (Active Directory Certificate Services' ldap:/// locations included), or takes a supplied one, and checks the CRL's issuer and signature, freshness, scope (issuingDistributionPoint shards: only CA or end-entity certificates, some reasons, the URL it was fetched from), then whether the serial is listed, with time and reason. " +
+			"Where the CA publishes delta CRLs (freshestCRL), fetches the delta, checks that it belongs to the base CRL, and merges it: newer revocations, and certificates released from hold. " +
 			"For CAs that publish no OCSP (Let's Encrypt, Google Trust Services).",
 		Params: []Param{
 			{Name: "cert", Type: "string", Path: true, Required: true, File: true, Desc: "Certificate (PEM or base64 DER); a PEM chain may follow it"},
 			{Name: "issuer", Type: "string", Path: true, File: true, Desc: "Issuer certificate, if not in the chain or fetchable"},
 			{Name: "crl", Type: "string", Path: true, File: true, Desc: "A CRL (PEM or base64 DER) to check instead of downloading"},
+			{Name: "delta_crl", Type: "string", Path: true, File: true, Desc: "A delta CRL (PEM or base64 DER) to apply instead of downloading the one the CRL or certificate names (freshestCRL)"},
+			{Name: "ldap_url", Type: "string", Desc: "Directory for ldap:/// CRL locations that name no host, as Active Directory Certificate Services writes them, e.g. ldaps://dc1.corp.example; default: the domain in the entry's DN"},
+			{Name: "starttls", Type: "bool", Desc: "Upgrade ldap:// connections for CRLs with StartTLS"},
+			{Name: "bind_dn", Type: "string", Desc: "DN to bind as to read CRLs from a directory (needs ldaps:// or starttls); omit for an anonymous bind"},
+			{Name: "ldap_password", Type: "string", Secret: true, Desc: "Bind password (prefer env IDPDBG_LDAP_PASSWORD or a profile)"},
 			allowPrivateURLs,
 		},
 		Run: runCRL,

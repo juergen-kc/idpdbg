@@ -17,6 +17,21 @@ as the release notes, and refuses a tag without one.
 ### Added
 - [ROADMAP.md](ROADMAP.md): what is planned next of the features not covered
   yet, in which order, and how each will be tested.
+- `pki crl` reads CRLs from a directory: `ldap://` and `ldaps://`
+  distribution points, including the host-less `ldap:///CN=…,CN=CDP,…`
+  locations Active Directory Certificate Services writes by default. Such a
+  location goes to `--ldap-url`, or to the domain named by the entry's DN;
+  `--bind-dn` and `--ldap-password` read it as a user (only over ldaps:// or
+  `--starttls`). As for http locations, the directory must be on a public
+  address unless `--allow-private-urls` is given. `tls probe --crl` and the
+  FIDO metadata signer check fetch these locations too.
+- `pki crl` merges delta CRLs: it follows `freshestCRL` from the CRL or the
+  certificate (or takes `--delta-crl`), checks the delta's issuer,
+  signature, freshness and that it belongs to the base CRL, and applies it:
+  certificates revoked since the base CRL, and certificates released from
+  hold (removeFromCRL).
+- CI publishes a base and a delta CRL in Samba AD's configuration partition
+  and reads them back through an AD CS-style location.
 
 ## [0.24.0] - 2026-11-19
 

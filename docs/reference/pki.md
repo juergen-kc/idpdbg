@@ -112,7 +112,7 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## pki crl
 
-Check a certificate's revocation status against its CRL (RFC 5280): finds the issuer, downloads the CRL from the certificate's distribution points (or takes a supplied one), and checks the CRL's issuer and signature, freshness, scope (delta CRLs, and issuingDistributionPoint shards: only CA or end-entity certificates, some reasons, the URL it was fetched from), then whether the serial is listed, with time and reason. For CAs that publish no OCSP (Let's Encrypt, Google Trust Services).
+Check a certificate's revocation status against its CRL (RFC 5280): finds the issuer, downloads the CRL from the certificate's distribution points over http(s) or from a directory over ldap(s) (Active Directory Certificate Services' ldap:/// locations included), or takes a supplied one, and checks the CRL's issuer and signature, freshness, scope (issuingDistributionPoint shards: only CA or end-entity certificates, some reasons, the URL it was fetched from), then whether the serial is listed, with time and reason. Where the CA publishes delta CRLs (freshestCRL), fetches the delta, checks that it belongs to the base CRL, and merges it: newer revocations, and certificates released from hold. For CAs that publish no OCSP (Let's Encrypt, Google Trust Services).
 
 MCP tool: `pki_crl`.
 
@@ -121,6 +121,11 @@ MCP tool: `pki_crl`.
 | `--cert` | string | Certificate (PEM or base64 DER); a PEM chain may follow it. **Required.** CLI: `@path` reads a file, `-` reads stdin. May be a file path (CLI or profile only). |
 | `--issuer` | string | Issuer certificate, if not in the chain or fetchable. CLI: `@path` reads a file, `-` reads stdin. May be a file path (CLI or profile only). |
 | `--crl` | string | A CRL (PEM or base64 DER) to check instead of downloading. CLI: `@path` reads a file, `-` reads stdin. May be a file path (CLI or profile only). |
+| `--delta-crl` | string | A delta CRL (PEM or base64 DER) to apply instead of downloading the one the CRL or certificate names (freshestCRL). CLI: `@path` reads a file, `-` reads stdin. May be a file path (CLI or profile only). |
+| `--ldap-url` | string | Directory for ldap:/// CRL locations that name no host, as Active Directory Certificate Services writes them, e.g. ldaps://dc1.corp.example; default: the domain in the entry's DN. |
+| `--starttls` | bool | Upgrade ldap:// connections for CRLs with StartTLS. |
+| `--bind-dn` | string | DN to bind as to read CRLs from a directory (needs ldaps:// or starttls); omit for an anonymous bind. |
+| `--ldap-password` | string | Bind password (prefer env IDPDBG_LDAP_PASSWORD or a profile). Secret: falls back to `IDPDBG_LDAP_PASSWORD`, redacted in traces. |
 | `--allow-private-urls` | bool | Let URLs taken from certificates (OCSP responders, caIssuers) reach loopback, private or link-local addresses, for an internal PKI. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 
 Plus the [common parameters](README.md#common-parameters).
