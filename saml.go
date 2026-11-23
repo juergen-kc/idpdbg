@@ -549,7 +549,6 @@ type samlExpect struct {
 	ACS          string
 	InResponseTo string
 	Leeway       time.Duration
-	KeyWithheld  string // why SPKey is not used, when it is withheld
 }
 
 func samlTime(s string) (time.Time, bool) {
@@ -690,11 +689,7 @@ func analyzeSAML(xmlBytes []byte, ex *samlExpect) (M, error) {
 		for _, enc := range kids(root, "EncryptedAssertion") {
 			encryptionAlgChecks(&cs, enc)
 			if ex.SPKey == nil {
-				why := "the assertion is encrypted; pass sp_key to decrypt it"
-				if ex.KeyWithheld != "" {
-					why = ex.KeyWithheld
-				}
-				cs.add("assertion: decryption", "warn", why, "SAML Core §2.3.4")
+				cs.add("assertion: decryption", "warn", "the assertion is encrypted; pass sp_key to decrypt it", "SAML Core §2.3.4")
 				continue
 			}
 			a, err := decryptAssertion(enc, ex.SPKey)
@@ -912,16 +907,10 @@ func resolveIDP(c *Ctx) (ssoURL, binding string, meta *idpMeta, trusted []*x509.
 	return
 }
 
-// samlExpectFrom is what a response must satisfy. supplied says the
-// response came from the caller rather than from an exchange idpdbg ran;
-// over MCP a stored sp_key does not decrypt such a response, so a tool
-// call cannot use the person's SP key to decrypt whatever it is handed.
-func samlExpectFrom(c *Ctx, trusted []*x509.Certificate, supplied bool) (*samlExpect, error) {
+func samlExpectFrom(c *Ctx, trusted []*x509.Certificate) (*samlExpect, error) {
 	ex := &samlExpect{Trusted: trusted, Audience: c.Str("sp_entity_id"), ACS: c.Str("acs_url"), InResponseTo: c.Str("in_response_to"),
 		Leeway: time.Duration(c.Int("leeway")) * time.Second}
-	if supplied && !c.CLI && c.stored["sp_key"] != "" {
-		ex.KeyWithheld = "the assertion is encrypted; over MCP the sp_key from the " + c.stored["sp_key"] + " does not decrypt a supplied response: pass sp_key in the call"
-	} else if s := c.Str("sp_key"); s != "" {
+	if s := c.Str("sp_key"); s != "" {
 		k, err := loadRSAKey(s)
 		if err != nil {
 			return nil, fmt.Errorf("sp_key: %w", err)
@@ -964,7 +953,7 @@ func spMetadataXML(sp *spConfig, signed bool) string {
 var (
 	samlSPParams = []Param{
 		{Name: "sp_entity_id", Type: "string", Desc: "Entity ID this tool presents as the service provider", Default: "idpdbg"},
-		{Name: "sp_key", Type: "string", Path: true, Desc: "SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions"},
+		{Name: "sp_key", Type: "string", Path: true, Explicit: true, Desc: "SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions"},
 		{Name: "sp_cert", Type: "string", Path: true, Desc: "SP certificate (PEM inline or a path)"},
 	}
 	samlIDPParams = []Param{
@@ -1065,7 +1054,7 @@ func init() {
 					{Name: "sp_entity_id", Type: "string", Desc: "Expected audience (the SP entity ID)"},
 					{Name: "acs_url", Type: "string", Desc: "Expected Destination / Recipient (the ACS URL)"},
 					{Name: "in_response_to", Type: "string", Desc: "ID of the AuthnRequest the response must answer"},
-					{Name: "sp_key", Type: "string", Path: true, Desc: "SP RSA private key (PEM inline or a path) to decrypt an EncryptedAssertion; over MCP it must be passed in the call, not taken from a profile"},
+					{Name: "sp_key", Type: "string", Path: true, Explicit: true, Desc: "SP RSA private key (PEM inline or a path) to decrypt an EncryptedAssertion"},
 					leeway}),
 			Run: func(c *Ctx) (M, error) {
 				// A signed Redirect URL is parsed once; the signature is checked
@@ -1090,7 +1079,7 @@ func init() {
 				if err != nil {
 					return nil, err
 				}
-				ex, err := samlExpectFrom(c, trusted, true)
+				ex, err := samlExpectFrom(c, trusted)
 				if err != nil {
 					return nil, err
 				}

@@ -684,7 +684,7 @@ func TestGuards(t *testing.T) {
 	}
 	cfg := `{"profiles":{"dev":{"base_url":"https://scim.example/v2","scim_token":"tok","sp_key":"` + anyFile + `"},
 		"oidc":{"issuer":"https://op.example","client_id":"c","client_secret":"s"},
-		"pkj":{"issuer":"https://op.example","client_id":"c","client_auth":"private_key_jwt","client_key":"` + anyFile + `","sp_key":"` + anyFile + `"}}}`
+		"pkj":{"issuer":"https://op.example","client_id":"c","client_auth":"private_key_jwt","client_key":"` + anyFile + `","sp_key":"` + anyFile + `","rp_key":"` + anyFile + `"}}}`
 	if err := os.WriteFile(configPath(), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -735,7 +735,7 @@ func TestGuards(t *testing.T) {
 			t.Errorf("stored secret allowed to %s", u)
 		}
 	}
-	if err := prep("saml.decode", M{"profile": "pkj", "message": "<x/>", "idp_cert": "https://evil.example/-----BEGIN"}, false); err == nil {
+	if err := prep("saml.decode", M{"profile": "pkj", "message": "<x/>", "idp_cert": "https://evil.example/-----BEGIN"}, true); err == nil {
 		t.Error("a URL in a content parameter slipped past the guard")
 	}
 
@@ -752,8 +752,19 @@ func TestGuards(t *testing.T) {
 			t.Errorf("stored client_key usable with %v", raw)
 		}
 	}
-	if err := prep("saml.authn_request", M{"profile": "pkj", "sso_url": "https://evil.example/sso"}, false); err == nil {
+	if err := prep("saml.authn_request", M{"profile": "pkj", "sso_url": "https://evil.example/sso"}, true); err == nil {
 		t.Error("stored sp_key usable with a caller-chosen sso_url")
+	}
+	// Over MCP a key that signs or decrypts is never taken from a profile.
+	for op, raw := range map[string]M{"saml.authn_request": {}, "saml.decode": {"message": "<x/>"}, "wsfed.decode": {"wresult": "<x/>"}} {
+		raw["profile"] = "pkj"
+		args, _, _, err := prepareGuarded(findOp(op), raw, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if args["sp_key"] != nil || args["rp_key"] != nil {
+			t.Errorf("%s took a private key from the profile over MCP", op)
+		}
 	}
 
 	// File paths: refused from an MCP caller, accepted from the CLI or a profile.

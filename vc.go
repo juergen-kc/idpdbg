@@ -29,7 +29,7 @@ const (
 
 // sub runs another operation's logic with its own arguments in this run.
 func (c *Ctx) sub(args M) *Ctx {
-	return &Ctx{Context: c.Context, Op: c.Op, Args: args, Rec: c.Rec, CLI: c.CLI, Log: c.Log, guard: c.guard, stored: c.stored}
+	return &Ctx{Context: c.Context, Op: c.Op, Args: args, Rec: c.Rec, CLI: c.CLI, Log: c.Log, guard: c.guard}
 }
 
 func wellKnownURL(base, name string) (string, error) {

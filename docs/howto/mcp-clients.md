@@ -46,12 +46,15 @@ can't send them elsewhere:
 
 ## What an MCP caller can't do
 
-- **Read or write local files.** Key material and metadata (`sp_key`,
+- **Read or write local files.** Key material and metadata (`sp_cert`,
   `pem`, `jwks`, `idp_metadata`, keytabs, …) can't be file paths in a tool
   call: pass the content inline, or put the path in a profile.
-- **Sign or decrypt with a stored key unless the call names it.** Parameters
-  that sign or decrypt must be passed in the call, never taken from a profile
-  or the environment.
+- **Sign or decrypt what it supplies with a stored key.** Keys that sign or
+  decrypt content from the caller (`sp_key`, `rp_key`, JWT and JWE keys, a
+  CA's key, …) must be passed in the call, never taken from a profile or the
+  environment. Keys that authenticate idpdbg to a server (`client_key`,
+  `mtls_key`, `dpop_key`, keytabs) may come from a profile, but only go to
+  the profile's origins.
 - **Relay a security-key sign-in.** With a real key, `webauthn_register` and
   `webauthn_login` sign only for the origin the response is sent to (or
   offline for localhost).

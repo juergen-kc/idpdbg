@@ -666,7 +666,7 @@ func init() {
 					info["checks"] = pre
 					return info, err
 				}
-				ex, err := samlExpectFrom(c, trusted, false)
+				ex, err := samlExpectFrom(c, trusted)
 				if err != nil {
 					return nil, err
 				}

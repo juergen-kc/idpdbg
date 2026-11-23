@@ -46,12 +46,12 @@ as the release notes, and refuses a tag without one.
   when the EncryptedKey says.
 
 ### Security
-- Over MCP, a private key that decrypts must come with the call: `--rp-key`
-  is never taken from a profile, and `saml decode` no longer decrypts a
-  supplied response with a profile's `sp_key` (it says to pass the key).
-  Profiles' `sp_key` still signs requests and decrypts the responses of
-  exchanges idpdbg runs itself, toward the origins the profile allows. On
-  the command line nothing changes.
+- Over MCP, `sp_key` and the new `rp_key` must be passed in the call, like
+  the other keys that sign or decrypt what the caller supplies; they are no
+  longer taken from a profile. Otherwise a tool call could decrypt any
+  ciphertext encrypted to the person's SP key with `saml decode`, or sign
+  SAML requests with it. On the command line nothing changes; MCP clients
+  that relied on a profile's `sp_key` now pass the key inline.
 
 ## [0.24.0] - 2026-11-19
 

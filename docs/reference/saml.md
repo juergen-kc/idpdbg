@@ -35,7 +35,7 @@ MCP tool: `saml_authn_request`.
 | `--sign` | bool | Sign the request with sp_key. |
 | `--response-binding` | string | Binding the IdP should answer with: post, or artifact (resolved over SOAP). Default `post`. One of `post`, `artifact`. |
 | `--sp-entity-id` | string | Entity ID this tool presents as the service provider. Default `idpdbg`. |
-| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--sp-cert` | string | SP certificate (PEM inline or a path). May be a file path (CLI or profile only). |
 | `--acs-url` | string | Assertion Consumer Service URL to ask the IdP to respond to. |
 
@@ -61,7 +61,7 @@ MCP tool: `saml_login`. Opens a browser and waits for a person.
 | `--sign` | bool | Sign the request with sp_key. |
 | `--response-binding` | string | Binding the IdP should answer with: post, or artifact (resolved over SOAP). Default `post`. One of `post`, `artifact`. |
 | `--sp-entity-id` | string | Entity ID this tool presents as the service provider. Default `idpdbg`. |
-| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--sp-cert` | string | SP certificate (PEM inline or a path). May be a file path (CLI or profile only). |
 | `--acs-port` | int | Loopback port for the local ACS. Default `8766`. |
 | `--ars-url` | string | ArtifactResolutionService URL, overriding metadata (artifact responses). |
@@ -88,7 +88,7 @@ MCP tool: `saml_decode`.
 | `--sp-entity-id` | string | Expected audience (the SP entity ID). |
 | `--acs-url` | string | Expected Destination / Recipient (the ACS URL). |
 | `--in-response-to` | string | ID of the AuthnRequest the response must answer. |
-| `--sp-key` | string | SP RSA private key (PEM inline or a path) to decrypt an EncryptedAssertion; over MCP it must be passed in the call, not taken from a profile. May be a file path (CLI or profile only). |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) to decrypt an EncryptedAssertion. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
 
 Plus the [common parameters](README.md#common-parameters).
@@ -121,7 +121,7 @@ MCP tool: `saml_logout`. Opens a browser and waits for a person.
 | `--idp-metadata` | string | IdP metadata: a URL, a file path or inline XML. May be a file path (CLI or profile only). |
 | `--idp-cert` | string | IdP signing certificate (PEM inline or a path), instead of or in addition to metadata. May be a file path (CLI or profile only). |
 | `--sp-entity-id` | string | Entity ID this tool presents as the service provider. Default `idpdbg`. |
-| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--sp-cert` | string | SP certificate (PEM inline or a path). May be a file path (CLI or profile only). |
 | `--slo-url` | string | IdP SingleLogoutService URL, overriding metadata. |
 | `--binding` | string | Binding used to send the LogoutRequest. Default `redirect`. One of `redirect`, `post`. |
@@ -151,7 +151,7 @@ MCP tool: `saml_resolve_artifact`.
 | `--idp-metadata` | string | IdP metadata: a URL, a file path or inline XML. May be a file path (CLI or profile only). |
 | `--idp-cert` | string | IdP signing certificate (PEM inline or a path), instead of or in addition to metadata. May be a file path (CLI or profile only). |
 | `--sp-entity-id` | string | Entity ID this tool presents as the service provider. Default `idpdbg`. |
-| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--sp-cert` | string | SP certificate (PEM inline or a path). May be a file path (CLI or profile only). |
 | `--mtls-cert` | string | Client certificate for mutual TLS to the resolution service. May be a file path (CLI or profile only). |
 | `--mtls-key` | string | Private key for mtls_cert. May be a file path (CLI or profile only). |

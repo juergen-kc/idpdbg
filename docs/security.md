@@ -63,9 +63,15 @@ explicitly is always used as given.
   attempts are left.
 - An MCP caller cannot make the server read or write local files: the CLI's
   `@file` / `-` shorthand and `saml_sp_metadata`'s `out` are CLI-only, and the
-  key material and metadata parameters (`sp_key`, `sp_cert`, `idp_cert`, `pem`,
-  `jwks`, `idp_metadata`) accept a file path only from the CLI or from a
-  profile. Over MCP, pass that content inline or put the path in a profile.
+  certificate and metadata parameters (`sp_cert`, `idp_cert`, `pem`, `jwks`,
+  `idp_metadata`) accept a file path only from the CLI or from a profile.
+  Over MCP, pass that content inline or put the path in a profile.
+- Over MCP, a private key that signs or decrypts what the caller supplies
+  (`sp_key`, `rp_key`, JWT and JWE keys, a CA's or a holder's key) must be
+  passed inline in the call; it is never taken from a profile or the
+  environment. Keys that authenticate idpdbg to a server (`client_key`,
+  `mtls_key`, `dpop_key`, keytabs) may come from a profile, and then only
+  go to the profile's origins.
 - `--report` is a command-line flag, not a tool parameter, so an MCP caller
   can't write an HTML report to disk. The CLI writes it to a new file readable
   only by you (replacing a link rather than writing through it), since it can

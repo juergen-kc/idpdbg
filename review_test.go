@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -154,36 +152,4 @@ func TestLooksLikePathWindows(t *testing.T) {
 			t.Errorf("%q taken for a path", s)
 		}
 	}
-}
-
-// Over MCP a profile's sp_key signs what idpdbg sends, but does not decrypt
-// a response the caller hands in; on the command line, and when passed in
-// the call, it does.
-func TestStoredSPKeyDoesNotDecryptSuppliedResponses(t *testing.T) {
-	idpKey, idpCert, idpCertPEM, _ := selfSigned(t)
-	spKey, _, _, spKeyPEM := selfSigned(t)
-	dir := filepath.ToSlash(t.TempDir())
-	keyFile := dir + "/sp.key"
-	if err := os.WriteFile(keyFile, []byte(spKeyPEM), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("IDPDBG_CONFIG", dir+"/config.json")
-	if err := os.WriteFile(dir+"/config.json", []byte(`{"profiles":{"sp":{"sp_key":"`+keyFile+`"}}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	msg := base64.StdEncoding.EncodeToString([]byte(encryptAssertion(t, samlResponse(t, idpKey, idpCert, "_r", "https://sp.example/acs", "idpdbg"), &spKey.PublicKey, encAES256GCM, encRSAOAEP11)))
-	decode := func(args M, cli bool) M {
-		t.Helper()
-		res, err := runOp(t.Context(), findOp("saml.decode"), args, cli, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return res
-	}
-	r := decode(M{"profile": "sp", "message": msg, "idp_cert": idpCertPEM}, false)
-	if c := checkOf(r, "assertion: decryption"); c == nil || c.Status != "warn" || !strings.Contains(c.Detail, "pass sp_key in the call") {
-		t.Errorf("profile key decrypted a supplied response over MCP: %+v", c)
-	}
-	wantStatus(t, decode(M{"profile": "sp", "message": msg, "idp_cert": idpCertPEM, "sp_key": spKeyPEM}, false), "assertion: decryption", "pass")
-	wantStatus(t, decode(M{"profile": "sp", "message": msg, "idp_cert": idpCertPEM}, true), "assertion: decryption", "pass")
 }

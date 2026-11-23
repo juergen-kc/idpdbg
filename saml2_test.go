@@ -415,7 +415,7 @@ func TestSAMLAmbiguityAndDestinations(t *testing.T) {
 				for k, v := range extra {
 					raw[k] = v
 				}
-				_, err := runOp(t.Context(), findOp(op), raw, false, nil)
+				_, err := runOp(t.Context(), findOp(op), raw, true, nil) // over MCP the profile's sp_key is not used at all
 				refused := err != nil && strings.Contains(err.Error(), "refusing to send")
 				if refused != (host == "evil.example") {
 					t.Errorf("%s via metadata on %s: refused=%v (err=%v)", op, host, refused, err)
