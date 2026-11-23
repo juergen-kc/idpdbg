@@ -137,7 +137,8 @@ type idpMeta struct {
 	EntityID    string
 	SSO         map[string]string // binding -> location
 	SLO         map[string]string
-	ARS         map[int]string // ArtifactResolutionService index -> location
+	SLOResponse map[string]string // binding -> ResponseLocation, where it differs
+	ARS         map[int]string    // ArtifactResolutionService index -> location
 	NameIDs     []string
 	Certs       []*x509.Certificate
 	WantsSigned bool
@@ -176,13 +177,16 @@ func loadIDPMetadata(c *Ctx, src string) (*idpMeta, error) {
 		if idp == nil {
 			continue
 		}
-		m := &idpMeta{EntityID: ed.SelectAttrValue("entityID", ""), SSO: map[string]string{}, SLO: map[string]string{}, ARS: map[int]string{}, Root: ed,
+		m := &idpMeta{EntityID: ed.SelectAttrValue("entityID", ""), SSO: map[string]string{}, SLO: map[string]string{}, SLOResponse: map[string]string{}, ARS: map[int]string{}, Root: ed,
 			WantsSigned: idp.SelectAttrValue("WantAuthnRequestsSigned", "false") == "true"}
 		for _, s := range kids(idp, "SingleSignOnService") {
 			m.SSO[s.SelectAttrValue("Binding", "")] = s.SelectAttrValue("Location", "")
 		}
 		for _, s := range kids(idp, "SingleLogoutService") {
 			m.SLO[s.SelectAttrValue("Binding", "")] = s.SelectAttrValue("Location", "")
+			if rl := s.SelectAttrValue("ResponseLocation", ""); rl != "" {
+				m.SLOResponse[s.SelectAttrValue("Binding", "")] = rl
+			}
 		}
 		for _, s := range kids(idp, "ArtifactResolutionService") {
 			if i, err := strconv.Atoi(s.SelectAttrValue("index", "")); err == nil && s.SelectAttrValue("Binding", "") == bindSOAP {

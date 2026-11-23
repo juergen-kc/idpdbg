@@ -105,6 +105,9 @@ type kcBrowser struct {
 	userCode string
 	done     chan error
 	pending  int
+	// loggedOut, when set, recognises the page an IdP shows after a logout
+	// (it has no form to fill in).
+	loggedOut func(u *url.URL, body string) bool
 }
 
 func newKCBrowser(t *testing.T) *kcBrowser {
@@ -182,6 +185,9 @@ func (b *kcBrowser) browse(start string) error {
 				return fmt.Errorf("device approval failed: %.300s", body)
 			}
 			return nil // "device login successful"; idpdbg is polling
+		}
+		if m == nil && b.loggedOut != nil && b.loggedOut(resp.Request.URL, string(body)) {
+			return nil // the IdP finished a logout that went through idpdbg's listener
 		}
 		if m == nil {
 			return fmt.Errorf("stuck at %s (HTTP %d) without a form: %.300s", resp.Request.URL, resp.StatusCode, body)
@@ -489,6 +495,33 @@ func TestKeycloakInterop(t *testing.T) {
 		kcWant(t, res, "LogoutRequest signed", "pass")
 	})
 
+	t.Run("saml idp-initiated logout", func(t *testing.T) {
+		b := newKCBrowser(t) // one browser: the logout ends the session the login started
+		res := kcRun(t, "saml.login", merge(browserArgs, M{"idp_metadata": samlMeta}), b)
+		kcClean(t, res)
+		n, si := str(find(res, "name_id", "value")), str(find(res, "authn_statement", "session_index"))
+		if sid, _, _ := strings.Cut(si, "::"); !kcUserSessionExists(t, sid) {
+			t.Fatalf("no Keycloak session %q after the login", sid)
+		}
+		b.loggedOut = func(u *url.URL, body string) bool {
+			return strings.Contains(u.Path, "/logout") || strings.Contains(body, "logged out")
+		}
+		res = kcRun(t, "saml.idp_logout", merge(browserArgs, M{"idp_metadata": samlMeta, "start_url": kcIssuer() + "/protocol/openid-connect/logout",
+			"name_id": n, "session_index": si}), b)
+		kcClean(t, res)
+		for _, c := range []string{"redirect binding signature", "LogoutRequest signed", "LogoutRequest: Issuer", "LogoutRequest: Destination",
+			"LogoutRequest names the expected NameID", "LogoutRequest names the expected session", "LogoutResponse sent"} {
+			kcWant(t, res, c, "pass")
+		}
+		b.wait(t)
+		// Keycloak's SessionIndex begins with its user session ID; that
+		// session must be gone now.
+		sid, _, _ := strings.Cut(si, "::")
+		if sid == "" || kcUserSessionExists(t, sid) {
+			t.Errorf("Keycloak session %q survived the logout", sid)
+		}
+	})
+
 	t.Run("saml logout", func(t *testing.T) {
 		if nameID == "" {
 			t.Skip("no NameID from the login")
@@ -496,6 +529,37 @@ func TestKeycloakInterop(t *testing.T) {
 		kcClean(t, kcRun(t, "saml.logout", merge(browserArgs, M{"idp_metadata": samlMeta, "name_id": nameID,
 			"name_id_format": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified", "session_index": sessionIndex}), newKCBrowser(t)))
 	})
+}
+
+// kcUserSessionExists asks the admin API whether the test user still has
+// the user session sid.
+func kcUserSessionExists(t *testing.T, sid string) bool {
+	t.Helper()
+	get := func(path string, v any) {
+		req, _ := http.NewRequest("GET", kcBase()+"/admin/realms/"+kcRealm+path, nil)
+		req.Header.Set("Authorization", "Bearer "+kcAdminToken(t))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	var users []struct{ ID string }
+	get("/users?exact=true&username="+url.QueryEscape(kcUser), &users)
+	if len(users) != 1 {
+		t.Fatalf("user %s: %v", kcUser, users)
+	}
+	var sessions []struct{ ID string }
+	get("/users/"+users[0].ID+"/sessions", &sessions)
+	for _, s := range sessions {
+		if s.ID == sid {
+			return true
+		}
+	}
+	return false
 }
 
 // kcInitialAccessToken asks the admin API for a one-use initial access

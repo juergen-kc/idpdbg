@@ -30,8 +30,10 @@ is in [development.md](development.md#interop-tests).
   - a FAPI 2.0 client (Keycloak's FAPI 2.0 DPoP client policy) with `--fapi`
     and its probes.
 
-  The SAML side covers metadata, and SP-initiated login and Single Logout,
-  both plain and with signed requests and encrypted assertions. Behaviour
+  The SAML side covers metadata, SP-initiated login and Single Logout,
+  both plain and with signed requests and encrypted assertions, and
+  IdP-initiated logout through the browser, with Keycloak's session
+  checked to be gone afterwards. Behaviour
   idpdbg explains there:
   - Introspection reports a token inactive when the asking client isn't in
     its audience.
@@ -88,7 +90,7 @@ The [roadmap](../ROADMAP.md) says which of these are planned, and in which
 order.
 
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
-profiles and IdP-initiated logout; WS-Trust renew/cancel, proof-of-possession
+profiles; WS-Trust renew/cancel, proof-of-possession
 keys; OID4VCI authorization-code issuance, mdoc
 credentials and the Digital Credentials API; for the software authenticator, attestation formats beyond none and packed self attestation;
 on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;

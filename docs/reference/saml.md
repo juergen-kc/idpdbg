@@ -160,3 +160,30 @@ MCP tool: `saml_resolve_artifact`.
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
 
 Plus the [common parameters](README.md#common-parameters).
+
+## saml idp_logout
+
+Receive IdP-initiated SAML Single Logout: run a local SingleLogoutService, wait for the IdP's LogoutRequest (Redirect or POST binding through the browser, or SOAP back channel), check its signature, issuer, Destination, timestamps and the NameID and SessionIndex it names, and answer with a LogoutResponse (optionally signed, optionally not Success to see how the IdP copes). Start the logout at the IdP yourself, or pass start_url to open its logout page.
+
+MCP tool: `saml_idp_logout`. Opens a browser and waits for a person.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `--idp-metadata` | string | IdP metadata: a URL, a file path or inline XML. May be a file path (CLI or profile only). |
+| `--idp-cert` | string | IdP signing certificate (PEM inline or a path), instead of or in addition to metadata. May be a file path (CLI or profile only). |
+| `--sp-entity-id` | string | Entity ID this tool presents as the service provider. Default `idpdbg`. |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) for signing requests and decrypting assertions. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
+| `--sp-cert` | string | SP certificate (PEM inline or a path). May be a file path (CLI or profile only). |
+| `--start-url` | string | Page to open to start the logout at the IdP, e.g. Keycloak's /realms/&lt;realm&gt;/protocol/openid-connect/logout; default: none, sign out at the IdP yourself. |
+| `--slo-url` | string | Where to send the LogoutResponse, overriding the IdP metadata's SingleLogoutService. |
+| `--name-id` | string | NameID the request should name, e.g. from a saml login. |
+| `--session-index` | string | SessionIndex the request should name. |
+| `--status` | string | Status to answer with: Success, Success with PartialLogout, or a Responder or Requester error. Default `success`. One of `success`, `partial`, `responder`, `requester`. |
+| `--sign` | bool | Sign the LogoutResponse with sp_key (and sp_cert for the POST binding). |
+| `--slo-port` | int | Loopback port for the local SingleLogoutService. Default `8766`. |
+| `--slo-path` | string | Path of the local SingleLogoutService. Default `/saml/slo`. |
+| `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
+| `--open-browser` | bool | Open the system browser automatically. Default `true`. |
+| `--wait` | int | Seconds to wait for the person to finish in the browser. Default `180`. |
+
+Plus the [common parameters](README.md#common-parameters).

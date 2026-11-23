@@ -32,6 +32,25 @@ or decode a response you captured from a real service provider's sign-in.
    AuthnRequests, or `--response-binding artifact` to test the Artifact
    binding.
 
+## Test logout started at the IdP
+
+When a person signs out at the IdP, it sends each service provider a
+LogoutRequest. idpdbg can play that service provider: it listens on the
+same local SingleLogoutService (`http://localhost:8766/saml/slo`, in the
+SP metadata above), checks the request and answers with a LogoutResponse.
+Sign in first with `saml login` in the same browser, then:
+
+```bash
+idpdbg saml idp_logout --idp-metadata https://idp.example.com/saml/metadata --name-id alice@example.com
+```
+
+and sign out at the IdP, or add `--start-url` with the IdP's logout page to
+open it. The request must be signed on the front channel (an unsigned one
+lets any web page log people out), name this SingleLogoutService as its
+Destination, and name the session you expect. `--status partial` or
+`--status responder` answers with something other than plain Success, to
+see how the IdP reports it.
+
 ## Decode a captured response
 
 Copy the `SAMLResponse` form value from the browser's developer tools, or

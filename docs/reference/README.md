@@ -11,7 +11,7 @@ Every operation runs as `idpdbg <group> <operation> [--param value ...]` and as 
 | [jwks](jwks.md) — JSON Web Key Sets | [`fetch`](jwks.md#jwks-fetch) |
 | [jwe](jwe.md) — JSON Web Encryption | [`decrypt`](jwe.md#jwe-decrypt), [`encrypt`](jwe.md#jwe-encrypt) |
 | [sdjwt](sdjwt.md) — Selective Disclosure JWTs | [`decode`](sdjwt.md#sdjwt-decode) |
-| [saml](saml.md) — SAML 2.0 | [`metadata`](saml.md#saml-metadata), [`authn_request`](saml.md#saml-authn_request), [`login`](saml.md#saml-login), [`decode`](saml.md#saml-decode), [`sp_metadata`](saml.md#saml-sp_metadata), [`logout`](saml.md#saml-logout), [`resolve_artifact`](saml.md#saml-resolve_artifact) |
+| [saml](saml.md) — SAML 2.0 | [`metadata`](saml.md#saml-metadata), [`authn_request`](saml.md#saml-authn_request), [`login`](saml.md#saml-login), [`decode`](saml.md#saml-decode), [`sp_metadata`](saml.md#saml-sp_metadata), [`logout`](saml.md#saml-logout), [`resolve_artifact`](saml.md#saml-resolve_artifact), [`idp_logout`](saml.md#saml-idp_logout) |
 | [wsfed](wsfed.md) — WS-Federation | [`metadata`](wsfed.md#wsfed-metadata), [`login`](wsfed.md#wsfed-login), [`decode`](wsfed.md#wsfed-decode), [`signout_url`](wsfed.md#wsfed-signout_url) |
 | [wstrust](wstrust.md) — WS-Trust | [`issue`](wstrust.md#wstrust-issue), [`validate`](wstrust.md#wstrust-validate) |
 | [scim](scim.md) — SCIM 2.0 provisioning | [`discover`](scim.md#scim-discover), [`request`](scim.md#scim-request), [`bulk`](scim.md#scim-bulk), [`scenario`](scim.md#scim-scenario) |
@@ -109,5 +109,6 @@ They open the browser on the machine running idpdbg and wait for a person to fin
 - [`oidc bcp_probe`](oidc.md#oidc-bcp_probe) (`oidc_bcp_probe`)
 - [`saml login`](saml.md#saml-login) (`saml_login`)
 - [`saml logout`](saml.md#saml-logout) (`saml_logout`)
+- [`saml idp_logout`](saml.md#saml-idp_logout) (`saml_idp_logout`)
 - [`wsfed login`](wsfed.md#wsfed-login) (`wsfed_login`)
 - [`gnap grant`](gnap.md#gnap-grant) (`gnap_grant`)

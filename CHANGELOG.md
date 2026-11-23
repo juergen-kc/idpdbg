@@ -25,6 +25,16 @@ as the release notes, and refuses a tag without one.
   service ticket.
 - PKINIT in Diffie-Hellman mode also checks PA_PKINIT_KX when the KDC
   sends it, and says so when it does not.
+- `saml idp_logout`: IdP-initiated Single Logout. idpdbg runs the local
+  SingleLogoutService, receives the IdP's LogoutRequest (Redirect or POST
+  binding through the browser, or SOAP), checks its signature (required on
+  the front channel), issuer, Destination, timestamps and the NameID and
+  SessionIndex it names (decrypting an EncryptedID with `--sp-key`), and
+  answers with a LogoutResponse in the same binding: Success, partial, or
+  an error, optionally signed. `--start-url` opens the IdP's logout page.
+  CI signs in to Keycloak, logs out there, and checks the session is gone.
+- SAML IdP metadata: a SingleLogoutService's ResponseLocation is used for
+  logout responses.
 
 ## [0.25.0] - 2026-11-23
 
