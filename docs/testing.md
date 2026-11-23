@@ -42,7 +42,13 @@ is in [development.md](development.md#interop-tests).
   The SAML side covers metadata, SP-initiated login and Single Logout,
   both plain and with signed requests and encrypted assertions, and
   IdP-initiated logout through the browser, with Keycloak's session
-  checked to be gone afterwards. Behaviour
+  checked to be gone afterwards. As an OID4VCI issuer (its `oid4vc-vci`
+  feature), Keycloak issues an SD-JWT VC through the authorization code
+  flow, asked for by scope, and by scope with authorization_details, with
+  PAR, a nonce and a proof of possession. It needs the credential's scope
+  even when authorization_details names the credential, which OID4VCI does
+  not require; idpdbg says so. It also signs credentials only with a
+  CA-issued certificate (HAIP), so the test realm loads one from a keystore. Behaviour
   idpdbg explains there:
   - Introspection reports a token inactive when the asking client isn't in
     its audience.
@@ -100,7 +106,7 @@ order.
 
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
 profiles; WS-Trust renew/cancel, proof-of-possession
-keys; OID4VCI authorization-code issuance, mdoc
+keys; mdoc
 credentials and the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
 on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,

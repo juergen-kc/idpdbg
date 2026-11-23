@@ -206,18 +206,19 @@ func runVCIIssue(c *Ctx) (M, error) {
 	}
 	grants, _ := offer["grants"].(map[string]any)
 	pre, _ := grants[preAuthGrant].(map[string]any)
+	authGrant, _ := grants["authorization_code"].(map[string]any)
 	code := c.Str("pre_authorized_code")
 	if code == "" {
 		code = str(pre["pre-authorized_code"])
-	}
-	if code == "" {
-		return out, errors.New("no pre-authorized code: this offer needs the authorization code flow")
 	}
 	confID := c.Str("configuration_id")
 	if confID == "" {
 		if ids, ok := offer["credential_configuration_ids"].([]any); ok && len(ids) > 0 {
 			confID = str(ids[0])
 		}
+	}
+	if confID == "" {
+		return out, errors.New("pass configuration_id (or an offer that names one)")
 	}
 	confs, _ := meta["credential_configurations_supported"].(map[string]any)
 	conf, _ := confs[confID].(map[string]any)
@@ -226,34 +227,31 @@ func runVCIIssue(c *Ctx) (M, error) {
 	}
 	out["configuration_id"] = confID
 
-	// Token request with the pre-authorized code.
+	// The authorization server: the offer's choice, else the issuer's first.
 	asBase := iss
 	if as, ok := meta["authorization_servers"].([]any); ok && len(as) > 0 {
 		asBase = str(as[0])
+	}
+	if a := str(authGrant["authorization_server"]); a != "" && code == "" {
+		asBase = a
 	}
 	am, _, err := fetchMeta(c, asBase)
 	if err != nil {
 		return out, err
 	}
-	tokenEP := str(am["token_endpoint"])
-	if err := c.allowDestination("the pre-authorized code", tokenEP); err != nil {
-		return out, err
-	}
-	form := url.Values{"grant_type": {preAuthGrant}, "pre-authorized_code": {code}}
-	if pre != nil && pre["tx_code"] != nil && c.Str("tx_code") == "" {
-		return out, errors.New("the offer requires tx_code (the code sent to the holder out of band)")
-	}
-	if tc := c.Str("tx_code"); tc != "" {
-		form.Set("tx_code", tc)
-	}
-	res, err := c.postForm(tokenEP, form, nil)
-	if err != nil {
-		return out, err
-	}
-	tok := res.obj()
-	if !cs.ok(res.Status == 200 && str(tok["access_token"]) != "", "token response", fmt.Sprintf("HTTP %d %s", res.Status, str(tok["error"])), vciRef+" §6.2") {
-		out["token_response"] = res.payload()
-		return out, nil
+
+	var tok M
+	if code != "" {
+		out["flow"] = "pre-authorized code"
+		if tok, err = vciPreAuthorizedToken(c, &cs, out, am, code, pre); err != nil || tok == nil {
+			return out, err
+		}
+	} else {
+		out["flow"] = "authorization code"
+		_, listsAS := meta["authorization_servers"].([]any)
+		if tok, err = vciAuthorizationCodeToken(c, &cs, out, am, iss, confID, conf, authGrant, listsAS); err != nil || tok == nil {
+			return out, err
+		}
 	}
 	credIdent := ""
 	if ad, ok := tok["authorization_details"].([]any); ok && len(ad) > 0 {
@@ -374,6 +372,155 @@ func runVCIIssue(c *Ctx) (M, error) {
 		cs.add("holder key", "info", "a new P-256 key was generated; holder_key in this result is needed to present the credential (vp present)", vciRef)
 	}
 	return out, nil
+}
+
+// vciPreAuthorizedToken redeems a pre-authorized code (OID4VCI §6.1).
+func vciPreAuthorizedToken(c *Ctx, cs *Checks, out, am M, code string, pre map[string]any) (M, error) {
+	tokenEP := str(am["token_endpoint"])
+	if err := c.allowDestination("the pre-authorized code", tokenEP); err != nil {
+		return nil, err
+	}
+	form := url.Values{"grant_type": {preAuthGrant}, "pre-authorized_code": {code}}
+	if pre != nil && pre["tx_code"] != nil && c.Str("tx_code") == "" {
+		return nil, errors.New("the offer requires tx_code (the code sent to the holder out of band)")
+	}
+	if tc := c.Str("tx_code"); tc != "" {
+		form.Set("tx_code", tc)
+	}
+	res, err := c.postForm(tokenEP, form, nil)
+	if err != nil {
+		return nil, err
+	}
+	tok := res.obj()
+	if !cs.ok(res.Status == 200 && str(tok["access_token"]) != "", "token response", fmt.Sprintf("HTTP %d %s", res.Status, str(tok["error"])), vciRef+" §6.2") {
+		out["token_response"] = res.payload()
+		return nil, nil
+	}
+	return tok, nil
+}
+
+// vciAuthorizationCodeToken runs the authorization code flow (OID4VCI §5):
+// the wallet asks the authorization server for the credential, with
+// authorization_details of type openid_credential (RFC 9396) or the
+// configuration's scope, passes the offer's issuer_state, signs the person
+// in through the browser with PKCE (and PAR when the server wants it), and
+// redeems the code.
+func vciAuthorizationCodeToken(c *Ctx, cs *Checks, out, am M, iss, confID string, conf, authGrant map[string]any, listsAS bool) (M, error) {
+	if c.Str("client_id") == "" {
+		return nil, errors.New("the authorization code flow needs client_id: the wallet's client at the issuer's authorization server")
+	}
+	rarTypes, _ := am["authorization_details_types_supported"].([]any)
+	rar := false
+	for _, t := range rarTypes {
+		rar = rar || str(t) == "openid_credential"
+	}
+	how := c.Str("request_by")
+	switch {
+	case how == "both" || how == "authorization_details" || how == "auto" && rar:
+		if how != "both" {
+			how = "authorization_details"
+		}
+		if !rar {
+			cs.add("authorization server supports authorization_details", "warn", "its metadata does not list openid_credential in authorization_details_types_supported", vciRef+" §5.1.1")
+		}
+	default:
+		how = "scope"
+		if str(conf["scope"]) == "" {
+			return nil, fmt.Errorf("configuration %q has no scope, and the authorization server does not list openid_credential authorization details: pass request_by authorization_details to try anyway", confID)
+		}
+	}
+	out["requested_by"] = how
+
+	args := M{}
+	for k, v := range c.Args {
+		args[k] = v
+	}
+	args["response_type"], args["pkce"], args["scope"] = "code", true, ""
+	args["par"] = c.Bool("par") || am["require_pushed_authorization_requests"] == true
+	extra := M{}
+	if how == "both" && str(conf["scope"]) == "" {
+		return nil, fmt.Errorf("configuration %q has no scope to send along with authorization_details", confID)
+	}
+	if how != "scope" {
+		ad := M{"type": "openid_credential", "credential_configuration_id": confID}
+		if listsAS {
+			// Required whenever the issuer names its authorization servers,
+			// even when it is its own (OID4VCI §5.1.1).
+			ad["locations"] = []string{iss}
+		}
+		extra["authorization_details"] = []M{ad}
+	}
+	if how != "authorization_details" {
+		args["scope"] = str(conf["scope"])
+	}
+	if st := str(authGrant["issuer_state"]); st != "" {
+		extra["issuer_state"] = st
+		cs.add("issuer_state passed on", "pass", "from the offer, so the issuer can tie the request to it", vciRef+" §5.1.3")
+	}
+	args["extra"] = extra
+	sub := c.sub(args)
+	redirectURI, port, path, err := loginRedirect(sub)
+	if err != nil {
+		return nil, err
+	}
+	a, err := buildAuthURL(sub, am, redirectURI)
+	if err != nil {
+		if a != nil {
+			*cs = append(*cs, a.Checks...)
+		}
+		return nil, err
+	}
+	*cs = append(*cs, a.Checks...)
+	out["authorization_url"] = a.URL
+	a.describe(out)
+	c.Log("Listening for the redirect on %s (register this exact redirect URI for client %s)", redirectURI, c.Str("client_id"))
+	vals, err := captureRedirectScheme(sub, a.URL, port, path, redirectScheme(redirectURI), a.State)
+	if err != nil {
+		return nil, err
+	}
+	if e := vals.Get("error"); e != "" {
+		cs.add("authorization response", "fail", e+": "+vals.Get("error_description"), "RFC 6749 §4.1.2.1")
+		return nil, nil
+	}
+	if !cs.ok(vals.Get("state") == a.State, "state matches the request", "", "RFC 6749 §10.12") {
+		return nil, nil
+	}
+	if is := vals.Get("iss"); is != "" {
+		cs.ok(is == str(am["issuer"]), "iss response parameter matches the authorization server", "iss="+is, "RFC 9207 §2.4")
+	} else if am["authorization_response_iss_parameter_supported"] == true {
+		cs.add("iss response parameter present", "fail", "the metadata promises an iss parameter but the response has none", "RFC 9207 §2.4")
+	}
+	code := vals.Get("code")
+	if !cs.ok(code != "", "authorization code returned", "", "RFC 6749 §4.1.2") {
+		return nil, nil
+	}
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirectURI}, "code_verifier": {a.Verifier}}
+	res, err := tokenCall(sub, am, form, cs, "")
+	if err != nil {
+		return nil, err
+	}
+	tok, _ := res["response"].(map[string]any)
+	if res["status"] != 200 || str(tok["access_token"]) == "" {
+		out["token_response"] = res["response"]
+		if how == "authorization_details" && str(conf["scope"]) != "" {
+			cs.add("credential scope alongside authorization_details", "info", "some authorization servers (Keycloak) also need the configuration's scope, although OID4VCI does not require it: try request_by both", vciRef+" §5.1")
+		}
+		return nil, nil
+	}
+	if how != "scope" {
+		ad, _ := tok["authorization_details"].([]any)
+		var ids []any
+		for _, x := range ad {
+			if m, _ := x.(map[string]any); m != nil && str(m["credential_configuration_id"]) == confID {
+				ids, _ = m["credential_identifiers"].([]any)
+			}
+		}
+		cs.ok(len(ids) > 0, "token response names the credential (authorization_details with credential_identifiers)",
+			fmt.Sprintf("%d credential identifier(s)", len(ids)), vciRef+" §6.2")
+	} else {
+		cs.ok(hasScope(str(tok["scope"]), str(conf["scope"])) || str(tok["scope"]) == "", "credential scope granted", "scope="+str(tok["scope"]), vciRef+" §5.1.2")
+	}
+	return tok, nil
 }
 
 // ---- presentation ----
@@ -807,15 +954,20 @@ func init() {
 		&Op{
 			Name:     "vci.issue",
 			Mutating: true,
-			Summary:  "Obtain a credential with OID4VCI's pre-authorized code flow, as a wallet: redeem the offer (with its transaction code), get a nonce, prove possession of a holder key, request the credential, and check the SD-JWT VC returned (issuer signature, disclosures, holder binding, vct). Generates a holder key if none is given and returns it for presenting later.",
-			Params: []Param{
+			Browser:  true,
+			Summary: "Obtain a credential with OID4VCI, as a wallet. With a pre-authorized code: redeem the offer (with its transaction code). Otherwise the authorization code flow: ask the issuer's authorization server for the credential (authorization_details of type openid_credential, or the configuration's scope), with the offer's issuer_state, PKCE and PAR when wanted, sign in through the browser and redeem the code. " +
+				"Then get a nonce, prove possession of a holder key, request the credential, and check the SD-JWT VC returned (issuer signature, disclosures, holder binding, vct). Generates a holder key if none is given and returns it for presenting later. The authorization code flow blocks until the person signs in.",
+			Params: joinParams([]Param{
 				{Name: "offer", Type: "string", Desc: "Credential offer: openid-credential-offer:// URL, JSON, or a credential_offer_uri"},
 				{Name: "issuer", Type: "string", Desc: "Credential issuer, if not from the offer"},
 				{Name: "pre_authorized_code", Type: "string", Desc: "Pre-authorized code, if not from the offer"},
 				{Name: "configuration_id", Type: "string", Desc: "Credential configuration to request; default the offer's first"},
 				{Name: "tx_code", Type: "string", Secret: true, Desc: "Transaction code the issuer sent out of band"},
 				{Name: "holder_key", Type: "string", Path: true, Explicit: true, Desc: "Holder private key (PEM or JWK); default a new P-256 key"},
-				{Name: "client_id", Type: "string", Desc: "Wallet client_id for the proof's iss (omit for anonymous pre-authorized access)"}},
+				{Name: "client_id", Type: "string", Desc: "The wallet's client_id at the authorization server: needed for the authorization code flow, and the proof's iss (omit for anonymous pre-authorized access)"},
+				{Name: "request_by", Type: "string", Enum: []string{"auto", "authorization_details", "scope", "both"}, Default: "auto", Desc: "Authorization code flow: ask for the credential with authorization_details (RFC 9396), the configuration's scope, or both (some servers, such as Keycloak, need the scope too); auto uses authorization_details when the server lists openid_credential"},
+				{Name: "par", Type: "bool", Desc: "Authorization code flow: push the authorization request first (RFC 9126); always done when the server requires it"}},
+				redirectParams, browserParams),
 			Run: runVCIIssue,
 		},
 		&Op{

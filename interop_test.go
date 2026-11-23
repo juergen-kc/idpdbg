@@ -459,6 +459,32 @@ func TestKeycloakInterop(t *testing.T) {
 		}
 	})
 
+	t.Run("vci issue: authorization code flow", func(t *testing.T) {
+		kcSetupVCI(t)
+		// Keycloak needs the credential's scope next to authorization_details,
+		// which OID4VCI does not require; idpdbg says so.
+		res := kcRun(t, "vci.issue", merge(browserArgs, M{"issuer": kcIssuer(), "configuration_id": "idpdbg-employee", "client_id": "idpdbg-wallet",
+			"request_by": "authorization_details"}), newKCBrowser(t))
+		kcWant(t, res, "token response", "fail")
+		kcWant(t, res, "credential scope alongside authorization_details", "info")
+		for _, by := range []string{"both", "scope"} {
+			res := kcRun(t, "vci.issue", merge(browserArgs, M{"issuer": kcIssuer(), "configuration_id": "idpdbg-employee", "client_id": "idpdbg-wallet",
+				"request_by": by, "par": by == "scope"}), newKCBrowser(t))
+			kcClean(t, res)
+			for _, c := range []string{"state matches the request", "authorization code returned", "nonce from the nonce endpoint", "credential issued",
+				"credential 1: issuer signature", "credential 1: bound to the holder key", "credential 1: vct"} {
+				kcWant(t, res, c, "pass")
+			}
+			if by == "both" {
+				kcWant(t, res, "token response names the credential", "pass")
+			}
+			claims := fmt.Sprint(find(res, "credential_1", "claims"))
+			if !strings.Contains(claims, "alice@example.com") || !strings.Contains(claims, "Interop") {
+				t.Errorf("%s: credential claims: %s", by, claims)
+			}
+		}
+	})
+
 	samlMeta := kcIssuer() + "/protocol/saml/descriptor"
 	t.Run("saml metadata", func(t *testing.T) {
 		kcClean(t, kcRun(t, "saml.metadata", M{"idp_metadata": samlMeta}, nil))
@@ -560,6 +586,64 @@ func kcUserSessionExists(t *testing.T, sid string) bool {
 		}
 	}
 	return false
+}
+
+// kcSetupVCI makes the realm an OID4VCI issuer (once): VCI enabled, an
+// ES256 key with a CA-issued certificate (Keycloak follows HAIP, which wants
+// an x5c chain and no self-signed signer; the keystore is mounted in the
+// realm directory by scripts/keycloak.sh), the idpdbg-employee SD-JWT VC
+// scope, the public client idpdbg-wallet, and the credential granted to
+// alice. Done through the admin API: a clientScopes list in the realm file
+// would replace Keycloak's default scopes.
+func kcSetupVCI(t *testing.T) {
+	t.Helper()
+	tok := kcAdminToken(t)
+	call := func(method, path, body string) (int, []byte) {
+		req, _ := http.NewRequest(method, kcBase()+"/admin/realms/"+kcRealm+path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, b
+	}
+	must := func(method, path, body string, ok ...int) []byte {
+		code, b := call(method, path, body)
+		for _, c := range ok {
+			if code == c {
+				return b
+			}
+		}
+		t.Fatalf("%s %s: HTTP %d %s", method, path, code, b)
+		return nil
+	}
+	if _, b := call("GET", "/clients?clientId=idpdbg-wallet", ""); strings.Contains(string(b), "idpdbg-wallet") {
+		return // set up by an earlier run against this container
+	}
+	must("PUT", "", `{"verifiableCredentialsEnabled":true}`, 204)
+	var realm struct{ ID string }
+	json.Unmarshal(must("GET", "", "", 200), &realm)
+	must("POST", "/components", `{"name":"vc-issuer","providerId":"java-keystore","providerType":"org.keycloak.keys.KeyProvider","parentId":"`+realm.ID+`",`+
+		`"config":{"keystore":["/opt/keycloak/data/idpdbg/vc-issuer.p12"],"keystorePassword":["idpdbg-interop"],"keyAlias":["vc-issuer"],"keyPassword":["idpdbg-interop"],`+
+		`"keystoreType":["PKCS12"],"algorithm":["ES256"],"priority":["300"],"active":["true"],"enabled":["true"]}}`, 201)
+	mapper := func(claim, attr string) string {
+		return `{"name":"` + claim + `","protocol":"oid4vc","protocolMapper":"oid4vc-user-attribute-mapper","config":{"claim.name":"` + claim + `","userAttribute":"` + attr + `"}}`
+	}
+	must("POST", "/client-scopes", `{"name":"idpdbg-employee","protocol":"oid4vc","attributes":{"vc.format":"dc+sd-jwt","vc.verifiable_credential_type":"https://idpdbg.example/employee",`+
+		`"vc.credential_signing_alg":"ES256","vc.credential_build_config.token_jws_type":"dc+sd-jwt","vc.cryptographic_binding_methods_supported":"jwk",`+
+		`"vc.binding_required":"true","vc.binding_required_proof_types":"jwt","include.in.token.scope":"true"},"protocolMappers":[`+
+		mapper("given_name", "firstName")+","+mapper("family_name", "lastName")+","+mapper("email", "email")+`]}`, 201)
+	must("POST", "/clients", `{"clientId":"idpdbg-wallet","publicClient":true,"standardFlowEnabled":true,"directAccessGrantsEnabled":false,`+
+		`"redirectUris":["http://localhost:8765/*"],"attributes":{"pkce.code.challenge.method":"S256","oid4vci.enabled":"true"},"optionalClientScopes":["idpdbg-employee"]}`, 201)
+	var users []struct{ ID string }
+	json.Unmarshal(must("GET", "/users?exact=true&username="+kcUser, "", 200), &users)
+	if len(users) != 1 {
+		t.Fatalf("user %s not found", kcUser)
+	}
+	must("POST", "/users/"+users[0].ID+"/vc/credentials", `{"credentialScopeName":"idpdbg-employee"}`, 200, 201)
 }
 
 // kcInitialAccessToken asks the admin API for a one-use initial access

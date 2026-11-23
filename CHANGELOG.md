@@ -14,6 +14,18 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- `vci issue`: the OID4VCI authorization code flow, for offers with an
+  `authorization_code` grant and for wallet-initiated issuance (issuer and
+  configuration_id, no offer). It asks the authorization server for the
+  credential with authorization_details of type openid_credential (with
+  `locations` whenever the issuer lists its authorization servers), the
+  configuration's scope, or both (`--request-by`), passes the offer's
+  issuer_state, uses PKCE and PAR when wanted, signs the person in through
+  the browser, checks state, iss and that the token response names the
+  credential, then requests and checks the credential as before.
+  Tested against Keycloak's OID4VCI issuer in CI.
+
 ## [0.26.1] - 2026-11-23
 
 ### Added

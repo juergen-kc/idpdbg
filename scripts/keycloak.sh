@@ -19,7 +19,8 @@ docker run -d --name "$NAME" -p 127.0.0.1:8080:8080 -p 127.0.0.1:9000:9000 \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
   -e KC_HEALTH_ENABLED=true \
   -v "$PWD/testdata/keycloak:/opt/keycloak/data/import:ro" \
-  "$IMAGE" start-dev --import-realm >/dev/null
+  -v "$PWD/testdata/keycloak/realm-files:/opt/keycloak/data/idpdbg:ro" \
+  "$IMAGE" start-dev --import-realm --features=oid4vc-vci >/dev/null
 
 i=0
 until curl -sf http://localhost:9000/health/ready >/dev/null; do

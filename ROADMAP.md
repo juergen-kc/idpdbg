@@ -24,7 +24,6 @@ server-supplied URLs held to public addresses. The
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| OID4VCI with the authorization code flow | The other half of OID4VCI issuance, next to the pre-authorized code | M | Issuer container in CI |
 | mdoc (ISO/IEC 18013-5) credentials | Decoding and issuer-signature checks first, presentation later | L | Published sample documents, then a container |
 | CTAP 2.1 credential management | List the passkeys on a security key; deleting only with explicit confirmation | M | Emulated key in the unit tests; real keys by hand |
 | SPIRE Server API | The server's administration API, next to the Workload API | L | SPIRE server container in CI |

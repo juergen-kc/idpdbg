@@ -113,3 +113,4 @@ They open the browser on the machine running idpdbg and wait for a person to fin
 - [`saml idp_logout`](saml.md#saml-idp_logout) (`saml_idp_logout`)
 - [`wsfed login`](wsfed.md#wsfed-login) (`wsfed_login`)
 - [`gnap grant`](gnap.md#gnap-grant) (`gnap_grant`)
+- [`vci issue`](vci.md#vci-issue) (`vci_issue`)

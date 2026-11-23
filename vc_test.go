@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -24,10 +25,14 @@ type mockIssuer struct {
 	key   *ecdsa.PrivateKey
 	mu    sync.Mutex
 	nonce string
+	// The authorization code flow: codes handed out, with the PKCE
+	// challenge, redirect URI and how the credential was asked for.
+	codes       map[string]M
+	issuerState string // the issuer_state the last authorization request carried
 }
 
 func newMockIssuer(t *testing.T) *mockIssuer {
-	is := &mockIssuer{}
+	is := &mockIssuer{codes: map[string]M{}}
 	is.key, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	mux := http.NewServeMux()
 	is.Server = httptest.NewServer(mux)
@@ -39,11 +44,34 @@ func newMockIssuer(t *testing.T) *mockIssuer {
 	}
 	mux.HandleFunc("/.well-known/openid-credential-issuer", func(w http.ResponseWriter, _ *http.Request) {
 		out(w, 200, M{"credential_issuer": is.URL, "credential_endpoint": is.URL + "/credential", "nonce_endpoint": is.URL + "/nonce",
-			"credential_configurations_supported": M{"pid": M{"format": "dc+sd-jwt", "vct": "urn:eudi:pid:1", "cryptographic_binding_methods_supported": []string{"jwk"},
+			"credential_configurations_supported": M{"pid": M{"format": "dc+sd-jwt", "vct": "urn:eudi:pid:1", "scope": "pid_scope", "cryptographic_binding_methods_supported": []string{"jwk"},
 				"proof_types_supported": M{"jwt": M{"proof_signing_alg_values_supported": []string{"ES256"}}}}}})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
-		out(w, 200, M{"issuer": is.URL, "token_endpoint": is.URL + "/token", "pre-authorized_grant_anonymous_access_supported": true})
+		out(w, 200, M{"issuer": is.URL, "token_endpoint": is.URL + "/token", "authorization_endpoint": is.URL + "/authorize",
+			"authorization_details_types_supported": []string{"openid_credential"}, "code_challenge_methods_supported": []string{"S256"},
+			"authorization_response_iss_parameter_supported": true, "pre-authorized_grant_anonymous_access_supported": true})
+	})
+	// The person signs in at once: the code goes straight back.
+	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		by := ""
+		var ad []M
+		if json.Unmarshal([]byte(q.Get("authorization_details")), &ad) == nil && len(ad) == 1 && ad[0]["type"] == "openid_credential" && ad[0]["credential_configuration_id"] == "pid" {
+			by = "authorization_details"
+		} else if q.Get("scope") == "pid_scope" {
+			by = "scope"
+		}
+		if q.Get("client_id") != "wallet" || q.Get("code_challenge_method") != "S256" || by == "" {
+			http.Error(w, "bad authorization request", 400)
+			return
+		}
+		code := randToken(8)
+		is.mu.Lock()
+		is.codes[code] = M{"challenge": q.Get("code_challenge"), "redirect_uri": q.Get("redirect_uri"), "by": by}
+		is.issuerState = q.Get("issuer_state")
+		is.mu.Unlock()
+		http.Redirect(w, r, q.Get("redirect_uri")+"?code="+code+"&state="+url.QueryEscape(q.Get("state"))+"&iss="+url.QueryEscape(is.URL), http.StatusFound)
 	})
 	mux.HandleFunc("/.well-known/jwt-vc-issuer", func(w http.ResponseWriter, _ *http.Request) {
 		k, _ := publicJWK(is.key.Public())
@@ -52,6 +80,26 @@ func newMockIssuer(t *testing.T) *mockIssuer {
 	})
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
+		if r.Form.Get("grant_type") == "authorization_code" {
+			is.mu.Lock()
+			c := is.codes[r.Form.Get("code")]
+			delete(is.codes, r.Form.Get("code"))
+			is.mu.Unlock()
+			sum := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
+			if c == nil || c["challenge"] != b64url(sum[:]) || c["redirect_uri"] != r.Form.Get("redirect_uri") || r.Form.Get("client_id") != "wallet" {
+				out(w, 400, M{"error": "invalid_grant"})
+				return
+			}
+			resp := M{"access_token": "at-1", "token_type": "Bearer", "expires_in": 300}
+			if c["by"] == "authorization_details" {
+				resp["authorization_details"] = []M{{"type": "openid_credential", "credential_configuration_id": "pid", "credential_identifiers": []string{"pid-1"}}}
+			} else {
+				resp["scope"] = "pid_scope"
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			out(w, 200, resp)
+			return
+		}
 		if r.Form.Get("grant_type") != preAuthGrant || r.Form.Get("pre-authorized_code") != "pac-1" || r.Form.Get("tx_code") != "1234" {
 			out(w, 400, M{"error": "invalid_grant"})
 			return
@@ -104,6 +152,13 @@ func newMockIssuer(t *testing.T) *mockIssuer {
 		out(w, 200, M{"credentials": []M{{"credential": jwt + "~" + given + "~" + family + "~" + birth + "~" + de + "~" + fr + "~"}}})
 	})
 	return is
+}
+
+// authOffer is an offer for the authorization code flow, with issuer_state.
+func (is *mockIssuer) authOffer() string {
+	o, _ := json.Marshal(M{"credential_issuer": is.URL, "credential_configuration_ids": []string{"pid"},
+		"grants": M{"authorization_code": M{"issuer_state": "st-1"}}})
+	return "openid-credential-offer://?credential_offer=" + url.QueryEscape(string(o))
 }
 
 func (is *mockIssuer) offer() string {
@@ -210,6 +265,40 @@ func TestVerifiableCredentials(t *testing.T) {
 	cred := issued["credentials"].([]string)[0]
 	hk, _ := json.Marshal(issued["holder_key"])
 	holder := string(hk)
+
+	t.Run("authorization code flow", func(t *testing.T) {
+		for _, by := range []string{"auto", "scope"} {
+			res := run(t, "vci.issue", M{"offer": is.authOffer(), "client_id": "wallet", "request_by": by, "redirect_port": freePort(t),
+				"open_browser": false, "wait": 10, "allow_private_urls": true}, followURL(t, nil))
+			noFailures(t, res)
+			want := map[string]string{"auto": "authorization_details", "scope": "scope"}[by]
+			if res["flow"] != "authorization code" || res["requested_by"] != want {
+				t.Errorf("%s: flow %v, requested by %v", by, res["flow"], res["requested_by"])
+			}
+			for _, n := range []string{"issuer_state passed on", "state matches the request", "iss response parameter matches", "authorization code returned",
+				"credential issued", "credential 1: bound to the holder key"} {
+				wantStatus(t, res, n, "pass")
+			}
+			if by == "auto" {
+				wantStatus(t, res, "token response names the credential", "pass")
+			} else {
+				wantStatus(t, res, "credential scope granted", "pass")
+			}
+			is.mu.Lock()
+			st := is.issuerState
+			is.mu.Unlock()
+			if st != "st-1" {
+				t.Errorf("%s: issuer_state at the authorization server: %q", by, st)
+			}
+		}
+		// Wallet-initiated, without an offer.
+		res := run(t, "vci.issue", M{"issuer": is.URL, "configuration_id": "pid", "client_id": "wallet", "redirect_port": freePort(t),
+			"open_browser": false, "wait": 10, "allow_private_urls": true}, followURL(t, nil))
+		wantStatus(t, res, "credential issued", "pass")
+		if _, err := tryOp(t, "vci.issue", M{"offer": is.authOffer(), "allow_private_urls": true}); err == nil || !strings.Contains(err.Error(), "client_id") {
+			t.Errorf("no client_id: %v", err)
+		}
+	})
 
 	t.Run("issuance failures", func(t *testing.T) {
 		if _, err := runOp(t.Context(), findOp("vci.issue"), M{"offer": is.offer(), "allow_private_urls": true}, false, nil); err == nil {

@@ -19,9 +19,9 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## vci issue
 
-Obtain a credential with OID4VCI's pre-authorized code flow, as a wallet: redeem the offer (with its transaction code), get a nonce, prove possession of a holder key, request the credential, and check the SD-JWT VC returned (issuer signature, disclosures, holder binding, vct). Generates a holder key if none is given and returns it for presenting later.
+Obtain a credential with OID4VCI, as a wallet. With a pre-authorized code: redeem the offer (with its transaction code). Otherwise the authorization code flow: ask the issuer's authorization server for the credential (authorization_details of type openid_credential, or the configuration's scope), with the offer's issuer_state, PKCE and PAR when wanted, sign in through the browser and redeem the code. Then get a nonce, prove possession of a holder key, request the credential, and check the SD-JWT VC returned (issuer signature, disclosures, holder binding, vct). Generates a holder key if none is given and returns it for presenting later. The authorization code flow blocks until the person signs in.
 
-MCP tool: `vci_issue`. **Changes data at the remote system.**
+MCP tool: `vci_issue`. **Changes data at the remote system.** Opens a browser and waits for a person.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -31,6 +31,14 @@ MCP tool: `vci_issue`. **Changes data at the remote system.**
 | `--configuration-id` | string | Credential configuration to request; default the offer's first. |
 | `--tx-code` | string | Transaction code the issuer sent out of band. Secret: falls back to `IDPDBG_TX_CODE`, redacted in traces. |
 | `--holder-key` | string | Holder private key (PEM or JWK); default a new P-256 key. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
-| `--client-id` | string | Wallet client_id for the proof's iss (omit for anonymous pre-authorized access). |
+| `--client-id` | string | The wallet's client_id at the authorization server: needed for the authorization code flow, and the proof's iss (omit for anonymous pre-authorized access). |
+| `--request-by` | string | Authorization code flow: ask for the credential with authorization_details (RFC 9396), the configuration's scope, or both (some servers, such as Keycloak, need the scope too); auto uses authorization_details when the server lists openid_credential. Default `auto`. One of `auto`, `authorization_details`, `scope`, `both`. |
+| `--par` | bool | Authorization code flow: push the authorization request first (RFC 9126); always done when the server requires it. |
+| `--redirect-host` | string | Host used in the redirect URI (localhost or 127.0.0.1). Default `localhost`. |
+| `--redirect-port` | int | Loopback port to listen on. Default `8765`. |
+| `--redirect-path` | string | Path of the redirect URI. Default `/callback`. |
+| `--redirect-uri` | string | Full redirect URI, overriding host/port/path; must point at this machine. |
+| `--open-browser` | bool | Open the system browser automatically. Default `true`. |
+| `--wait` | int | Seconds to wait for the person to finish in the browser. Default `180`. |
 
 Plus the [common parameters](README.md#common-parameters).
