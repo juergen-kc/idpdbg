@@ -88,7 +88,7 @@ MCP tool: `saml_decode`.
 | `--sp-entity-id` | string | Expected audience (the SP entity ID). |
 | `--acs-url` | string | Expected Destination / Recipient (the ACS URL). |
 | `--in-response-to` | string | ID of the AuthnRequest the response must answer. |
-| `--sp-key` | string | SP RSA private key (PEM inline or a path) to decrypt an EncryptedAssertion. May be a file path (CLI or profile only). |
+| `--sp-key` | string | SP RSA private key (PEM inline or a path) to decrypt an EncryptedAssertion; over MCP it must be passed in the call, not taken from a profile. May be a file path (CLI or profile only). |
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
 
 Plus the [common parameters](README.md#common-parameters).

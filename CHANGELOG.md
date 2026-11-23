@@ -45,6 +45,14 @@ as the release notes, and refuses a tag without one.
 - SAML decryption errors also name the certificate the IdP encrypted to,
   when the EncryptedKey says.
 
+### Security
+- Over MCP, a private key that decrypts must come with the call: `--rp-key`
+  is never taken from a profile, and `saml decode` no longer decrypts a
+  supplied response with a profile's `sp_key` (it says to pass the key).
+  Profiles' `sp_key` still signs requests and decrypts the responses of
+  exchanges idpdbg runs itself, toward the origins the profile allows. On
+  the command line nothing changes.
+
 ## [0.24.0] - 2026-11-19
 
 ### Added

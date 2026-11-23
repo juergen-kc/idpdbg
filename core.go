@@ -118,14 +118,15 @@ func findOp(name string) *Op {
 // Ctx is what an operation runs with.
 type Ctx struct {
 	context.Context
-	Op    *Op
-	Args  M
-	Rec   *Recorder
-	TLS   *tls.Config // base TLS client configuration: insecure and ca_cert applied
-	CLI   bool
-	dpop  crypto.Signer                 // DPoP key for this run, created on first use
-	guard *secretGuard                  // where stored credentials may go, when one is in use
-	Log   func(format string, a ...any) // progress for a person (stderr / MCP log notification)
+	Op     *Op
+	Args   M
+	Rec    *Recorder
+	TLS    *tls.Config // base TLS client configuration: insecure and ca_cert applied
+	CLI    bool
+	dpop   crypto.Signer                 // DPoP key for this run, created on first use
+	guard  *secretGuard                  // where stored credentials may go, when one is in use
+	stored map[string]string             // arguments not passed in the call: "profile" or "env"
+	Log    func(format string, a ...any) // progress for a person (stderr / MCP log notification)
 }
 
 func (c *Ctx) Str(n string) string {
@@ -673,14 +674,14 @@ func resolveArgs(op *Op, raw M, cli bool) (M, map[string]string, M, error) {
 
 // runOp prepares arguments, runs the operation and attaches the HTTP trace.
 func runOp(ctx context.Context, op *Op, raw M, cli bool, log func(string, ...any)) (M, error) {
-	args, _, guard, err := prepareGuarded(op, raw, cli)
+	args, stored, guard, err := prepareGuarded(op, raw, cli)
 	if err != nil {
 		return nil, err
 	}
 	if log == nil {
 		log = func(string, ...any) {}
 	}
-	c := &Ctx{Context: ctx, Op: op, Args: args, CLI: cli, Log: log, guard: guard}
+	c := &Ctx{Context: ctx, Op: op, Args: args, CLI: cli, Log: log, guard: guard, stored: stored}
 	if c.TLS, err = baseTLSConfig(c.Bool("insecure"), c.Str("ca_cert")); err != nil {
 		return nil, err
 	}
