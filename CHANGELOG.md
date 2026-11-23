@@ -14,6 +14,23 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Security
+- URLs a server hands back are held to public addresses: a provider's
+  `jwks_uri` and endpoints from discovery or metadata, SSF and OID4VCI
+  endpoints, and any other origin the caller did not name. A hostile
+  discovery document can no longer point idpdbg at loopback, private or
+  link-local addresses (cloud metadata services among them). If the URL
+  the caller passed is itself on such an address (an internal IdP,
+  Keycloak on localhost), server-supplied URLs may be too.
+  `--allow-private-urls` is now available on every operation and lifts the
+  rule.
+
+### Changed
+- Public-only requests (the above, and URLs from certificates) work
+  behind an HTTP proxy: the address is checked first and the proxy carries
+  the request. They also try every resolved address, not only the first
+  (an IPv6 address that refused the connection made them fail).
+
 ### Added
 - `krb pkinit --anonymous`: anonymous PKINIT (RFC 8062). A TGT for
   WELLKNOWN/ANONYMOUS with no client certificate; checks the KDC's

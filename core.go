@@ -90,6 +90,7 @@ var commonParams = []Param{
 	{Name: "insecure", Type: "bool", Desc: "Skip TLS certificate verification"},
 	{Name: "ca_cert", Type: "string", Path: true, Desc: "Also trust these CA certificates (PEM or base64 DER), e.g. an internal or Active Directory CA: inline, or a path from the CLI or a profile"},
 	{Name: "timeout", Type: "int", Desc: "Per-request network timeout in seconds", Default: 30},
+	allowPrivateURLs,
 }
 
 var registry []*Op
@@ -685,6 +686,7 @@ func runOp(ctx context.Context, op *Op, raw M, cli bool, log func(string, ...any
 		return nil, err
 	}
 	c.Rec = newRecorder(c.TLS)
+	c.Rec.serverNamed = serverNamedPolicy(c)
 	for _, p := range op.allParams() {
 		if s, ok := args[p.Name].(string); ok && (p.Secret || p.Explicit) {
 			c.Rec.secrets = append(c.Rec.secrets, s)

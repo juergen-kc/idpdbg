@@ -23,6 +23,5 @@ MCP tool: `tls_probe`.
 | `--versions` | bool | Also test which TLS versions the server accepts (direct TLS only). Default `true`. |
 | `--ocsp` | bool | Also ask the leaf certificate's OCSP responder for its status (a stapled response is always checked). |
 | `--crl` | bool | Also download the leaf certificate's CRL and check it is not listed. |
-| `--allow-private-urls` | bool | Let URLs taken from certificates (OCSP responders, caIssuers) reach loopback, private or link-local addresses, for an internal PKI. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 
 Plus the [common parameters](README.md#common-parameters).

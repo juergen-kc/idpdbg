@@ -290,7 +290,6 @@ func init() {
 			{Name: "starttls", Type: "bool", Desc: "Upgrade ldap:// connections for CRLs with StartTLS"},
 			{Name: "bind_dn", Type: "string", Desc: "DN to bind as to read CRLs from the directory in ldap_url (needs ldaps:// or starttls); other directories, which the certificate chose, are read anonymously"},
 			{Name: "ldap_password", Type: "string", Secret: true, Desc: "Bind password (prefer env IDPDBG_LDAP_PASSWORD or a profile)"},
-			allowPrivateURLs,
 		},
 		Run: runCRL,
 	})

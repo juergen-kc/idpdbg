@@ -52,6 +52,9 @@ type Recorder struct {
 	// withholdResponses keeps response bodies and cookies out of the
 	// exchanges recorded from now on (see withholdSigned).
 	withholdResponses bool
+	// serverNamed, when set, says whether a URL came from a server rather
+	// than from the caller; such URLs are fetched public-only.
+	serverNamed func(*url.URL) bool
 }
 
 var xmlPassword = regexp.MustCompile(`(<(?:[A-Za-z0-9_]+:)?Password\b[^>]*>)[^<]*(</)`)
@@ -91,13 +94,20 @@ func newRecorder(base *tls.Config) *Recorder {
 		if err != nil {
 			return nil, err
 		}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
+		var conn net.Conn
+		for _, ip := range ips { // each vetted address in turn, as a normal dial would
+			if conn, err = dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port)); err == nil {
+				return conn, nil
+			}
+		}
+		return nil, err
 	}
 	return &Recorder{base: t, public: pub, Items: []*Exchange{}}
 }
 
-// URLs that a certificate or a server supplies (OCSP responders, caIssuers)
-// are fetched public-only unless the caller allows otherwise.
+// URLs that a certificate or a server supplies (OCSP responders, caIssuers,
+// a provider's jwks_uri and endpoints) are fetched public-only unless the
+// caller allows otherwise, or itself pointed idpdbg at a non-public address.
 type ctxKey int
 
 const publicOnlyKey ctxKey = 1
@@ -168,10 +178,29 @@ func publicIPs(ctx context.Context, host string) ([]net.IP, error) {
 	}
 	for _, ip := range ips {
 		if blockedIP(ip) {
-			return nil, fmt.Errorf("%s resolves to %s, a non-public address; a URL taken from a certificate may not reach it (allow_private_urls permits it)", host, ip)
+			return nil, fmt.Errorf("%s resolves to %s, a non-public address; a URL taken from a certificate or a server's answer may not reach it (allow_private_urls permits it)", host, ip)
 		}
 	}
 	return ips, nil
+}
+
+// nonPublicHost says whether host is, or resolves to, a non-public
+// address. A name that does not resolve here (behind a proxy that resolves
+// it) is not counted as private.
+func nonPublicHost(ctx context.Context, host string) bool {
+	if ip := net.ParseIP(host); ip != nil {
+		return blockedIP(ip)
+	}
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if blockedIP(a.IP) {
+			return true
+		}
+	}
+	return false
 }
 
 // doPublic is c.do for a URL that came from a certificate or a server
@@ -260,13 +289,24 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	start := time.Now()
 	rt := r.base
-	if req.Context().Value(publicOnlyKey) != nil {
+	var resp *http.Response
+	var err error
+	if req.Context().Value(publicOnlyKey) != nil || (r.serverNamed != nil && r.serverNamed(req.URL)) {
 		if r.public == nil {
 			return nil, errors.New("no public-only transport")
 		}
 		rt = r.public
+		// Behind a proxy the proxy dials, so the address cannot be pinned:
+		// vet it here and let the proxy carry the request.
+		if p, perr := http.ProxyFromEnvironment(req); perr == nil && p != nil {
+			if _, err = publicIPs(req.Context(), req.URL.Hostname()); err == nil {
+				rt = r.base
+			}
+		}
 	}
-	resp, err := rt.RoundTrip(req)
+	if err == nil {
+		resp, err = rt.RoundTrip(req)
+	}
 	ex.DurationMs = time.Since(start).Milliseconds()
 	if err != nil {
 		ex.Error = err.Error()
@@ -337,6 +377,59 @@ func (r *httpResult) payload() any {
 		return r.JSON
 	}
 	return string(r.Body)
+}
+
+// serverNamedPolicy decides which URLs came from a server: every origin the
+// caller did not name (in an argument or a profile, defaults and idpdbg's
+// own listeners aside). They are held to public addresses, so a hostile
+// discovery document or metadata cannot point idpdbg at the network it
+// runs in, unless the caller itself pointed idpdbg at a non-public address
+// (an internal IdP, a test server on localhost) or allows private URLs.
+func serverNamedPolicy(c *Ctx) func(*url.URL) bool {
+	if c.Bool("allow_private_urls") || c.Op == nil {
+		return nil
+	}
+	caller := map[string]bool{}
+	var hosts []string
+	for _, p := range c.Op.allParams() {
+		if notDestinations[p.Name] {
+			continue
+		}
+		var vals []string
+		switch v := c.Args[p.Name].(type) {
+		case string:
+			vals = []string{v}
+		case []string:
+			vals = v
+		}
+		for _, s := range vals {
+			if p.Default != nil && fmt.Sprint(p.Default) == s {
+				continue
+			}
+			if o := targetOrigin(s); o != "" {
+				caller[o] = true
+				if u, err := url.Parse(strings.TrimSpace(s)); err == nil {
+					hosts = append(hosts, u.Hostname())
+				}
+			}
+		}
+	}
+	if len(caller) == 0 {
+		return nil // the caller named no server: whatever URLs there are came with its own input
+	}
+	var once sync.Once
+	callerPrivate := false
+	return func(u *url.URL) bool {
+		if caller[targetOrigin(u.String())] {
+			return false
+		}
+		once.Do(func() {
+			for _, h := range hosts {
+				callerPrivate = callerPrivate || nonPublicHost(c, h)
+			}
+		})
+		return !callerPrivate
+	}
 }
 
 func (c *Ctx) client() *http.Client {

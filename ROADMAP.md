@@ -12,13 +12,15 @@ server can run in CI, a CHANGELOG entry, and the line removed from
 Suggestions and use cases are welcome as issues. A concrete need moves an
 item up.
 
-## Phase 1: next
+## Phase 1: done
 
-| Item | Why | Size | How it is tested |
-|---|---|---|---|
-| Internal addresses for metadata URLs | Keep URLs from a provider's metadata (such as `jwks_uri`) off loopback, private and link-local addresses unless the issuer is on one or `--allow-private-urls` is given, as certificate URLs already are | S–M | Unit tests; the CI servers on localhost |
+CRL locations over LDAP and delta CRLs, encrypted WS-Trust and
+WS-Federation tokens, FAST armored by anonymous PKINIT, IdP-initiated SAML
+logout, certificate attestation for the software authenticator, and
+server-supplied URLs held to public addresses. The
+[CHANGELOG](CHANGELOG.md) has the details.
 
-## Phase 2: later
+## Phase 2: next
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|

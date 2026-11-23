@@ -106,7 +106,6 @@ MCP tool: `pki_ocsp`.
 | `--url` | string | Responder URL instead of the certificate's own. |
 | `--response` | string | A captured OCSP response (base64 DER) to check instead of querying. CLI: `@path` reads a file, `-` reads stdin. |
 | `--hash` | string | Hash for the request's CertID. Default `sha1`. One of `sha1`, `sha256`. |
-| `--allow-private-urls` | bool | Let URLs taken from certificates (OCSP responders, caIssuers) reach loopback, private or link-local addresses, for an internal PKI. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 
 Plus the [common parameters](README.md#common-parameters).
 
@@ -126,6 +125,5 @@ MCP tool: `pki_crl`.
 | `--starttls` | bool | Upgrade ldap:// connections for CRLs with StartTLS. |
 | `--bind-dn` | string | DN to bind as to read CRLs from the directory in ldap_url (needs ldaps:// or starttls); other directories, which the certificate chose, are read anonymously. |
 | `--ldap-password` | string | Bind password (prefer env IDPDBG_LDAP_PASSWORD or a profile). Secret: falls back to `IDPDBG_LDAP_PASSWORD`, redacted in traces. |
-| `--allow-private-urls` | bool | Let URLs taken from certificates (OCSP responders, caIssuers) reach loopback, private or link-local addresses, for an internal PKI. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 
 Plus the [common parameters](README.md#common-parameters).

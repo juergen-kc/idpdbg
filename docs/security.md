@@ -66,6 +66,16 @@ explicitly is always used as given.
   certificate and metadata parameters (`sp_cert`, `idp_cert`, `pem`, `jwks`,
   `idp_metadata`) accept a file path only from the CLI or from a profile.
   Over MCP, pass that content inline or put the path in a profile.
+- URLs a server hands back rather than the caller (a provider's
+  `jwks_uri` and endpoints from its discovery document or metadata, SSF and
+  OID4VCI endpoints, OCSP responders and CRL locations from certificates)
+  may only reach public addresses, checked when connecting, so a hostile
+  document cannot point idpdbg at the network it runs in. When the URL the
+  caller passed points at a loopback, private or link-local address itself
+  (an internal IdP, a test server on localhost), server-supplied URLs may
+  too; certificate URLs still need `allow_private_urls`, which lifts the
+  rule entirely. Behind an HTTP proxy the address is checked before the
+  proxy is asked, since the proxy then connects.
 - Over MCP, a private key that signs or decrypts what the caller supplies
   (`sp_key`, `rp_key`, JWT and JWE keys, a CA's or a holder's key) must be
   passed inline in the call; it is never taken from a profile or the

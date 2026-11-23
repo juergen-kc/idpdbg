@@ -44,6 +44,7 @@ Every operation also takes these.
 | `--insecure` | bool | Skip TLS certificate verification. |
 | `--ca-cert` | string | Also trust these CA certificates (PEM or base64 DER), e.g. an internal or Active Directory CA: inline, or a path from the CLI or a profile. May be a file path (CLI or profile only). |
 | `--timeout` | int | Per-request network timeout in seconds. Default `30`. |
+| `--allow-private-urls` | bool | Let URLs that certificates or servers supply (OCSP responders, CRL locations, a provider's jwks_uri and endpoints) reach loopback, private or link-local addresses. Server-supplied URLs already may when the URL you passed points at such an address. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 
 ## Secrets
 

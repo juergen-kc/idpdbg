@@ -367,7 +367,6 @@ func init() {
 			{Name: "versions", Type: "bool", Desc: "Also test which TLS versions the server accepts (direct TLS only)", Default: true},
 			{Name: "ocsp", Type: "bool", Desc: "Also ask the leaf certificate's OCSP responder for its status (a stapled response is always checked)"},
 			{Name: "crl", Type: "bool", Desc: "Also download the leaf certificate's CRL and check it is not listed"},
-			allowPrivateURLs,
 		},
 		Run: runTLSProbe,
 	})

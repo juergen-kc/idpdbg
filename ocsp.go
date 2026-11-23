@@ -191,7 +191,7 @@ func parseIssuerDownload(b []byte) (*x509.Certificate, error) {
 }
 
 var allowPrivateURLs = Param{Name: "allow_private_urls", Type: "bool", Explicit: true,
-	Desc: "Let URLs taken from certificates (OCSP responders, caIssuers) reach loopback, private or link-local addresses, for an internal PKI"}
+	Desc: "Let URLs that certificates or servers supply (OCSP responders, CRL locations, a provider's jwks_uri and endpoints) reach loopback, private or link-local addresses. Server-supplied URLs already may when the URL you passed points at such an address"}
 
 func runOCSP(c *Ctx) (M, error) {
 	o, err := parsePKI(c.Str("cert"))
@@ -257,7 +257,6 @@ func init() {
 			{Name: "url", Type: "string", Desc: "Responder URL instead of the certificate's own"},
 			{Name: "response", Type: "string", File: true, Desc: "A captured OCSP response (base64 DER) to check instead of querying"},
 			{Name: "hash", Type: "string", Enum: []string{"sha1", "sha256"}, Default: "sha1", Desc: "Hash for the request's CertID"},
-			allowPrivateURLs,
 		},
 		Run: runOCSP,
 	})
