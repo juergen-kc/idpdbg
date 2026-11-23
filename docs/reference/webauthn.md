@@ -30,7 +30,7 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## webauthn register
 
-Register a passkey with a relying party: fetches (or takes) the creation options and checks them (challenge, user handle, algorithms, RP ID against the origin), makes the credential, submits it and reports whether the server accepts it. The authenticator is a software one (ES256, EdDSA or RS256; none or packed self attestation) or, with authenticator=usb, a real security key over CTAP2 or U2F, whose attestation is verified locally (the person must touch the key: tell them first). Returns the credential for webauthn.login. tamper sends a deliberately broken response to test that the server rejects it.
+Register a passkey with a relying party: fetches (or takes) the creation options and checks them (challenge, user handle, algorithms, RP ID against the origin), makes the credential, submits it and reports whether the server accepts it. The authenticator is a software one (ES256, EdDSA or RS256; none, packed self attestation, packed with an attestation certificate chain, or fido-u2f) or, with authenticator=usb, a real security key over CTAP2 or U2F, whose attestation is verified locally (the person must touch the key: tell them first). Returns the credential for webauthn.login. tamper sends a deliberately broken response to test that the server rejects it.
 
 MCP tool: `webauthn_register`. **Changes data at the remote system.**
 
@@ -54,9 +54,10 @@ MCP tool: `webauthn_register`. **Changes data at the remote system.**
 | `--resident-key` | bool | Security key: make a discoverable credential (stored on the key, using one of its slots). |
 | `--metadata` | bool | Security key: check the key's attestation against the FIDO Metadata Service (model, certification, security status, chain to the model's root). |
 | `--alg` | int | Software authenticator: COSE algorithm (-7 ES256, -8 EdDSA, -257 RS256); default the server's first supported. |
-| `--attestation-format` | string | Attestation statement format (packed is self attestation). Default `none`. One of `none`, `packed`. |
+| `--attestation-format` | string | Software authenticator: attestation statement format: none, packed self attestation, packed with an attestation certificate (x5c), or fido-u2f (ES256 only). Default `none`. One of `none`, `packed`, `packed-x5c`, `fido-u2f`. |
+| `--attestation-ca` | string | With packed-x5c or fido-u2f: certificate and private key (PEM) of the CA that issues the attestation certificate, one the relying party trusts; default a throwaway CA, whose root the result shows. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--backup-eligible` | bool | Mark the credential as a synced passkey (BE and BS flags). |
-| `--tamper` | string | Send a broken response; the check passes if the server rejects it. One of `wrong_origin`, `wrong_rp_id_hash`, `wrong_challenge`, `wrong_type`, `no_user_present`, `bad_attestation_signature`. |
+| `--tamper` | string | Send a broken response; the check passes if the server rejects it. One of `wrong_origin`, `wrong_rp_id_hash`, `wrong_challenge`, `wrong_type`, `no_user_present`, `bad_attestation_signature`, `broken_attestation_chain`, `bad_attestation_certificate`. |
 | `--out` | string | Also write the credential to this file (CLI only). |
 
 Plus the [common parameters](README.md#common-parameters).

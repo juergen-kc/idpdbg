@@ -3,7 +3,11 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -42,6 +46,11 @@ type testRP struct {
 	requireUV bool
 	lastClone bool
 	direct    bool // ask for direct attestation
+	// attestationRoots, when set, makes the RP accept only attestation
+	// certificates that chain to these roots, as an RP that restricts
+	// authenticator models does (go-webauthn leaves that to a metadata
+	// provider).
+	attestationRoots *x509.CertPool
 }
 
 func newTestRP(t *testing.T) *testRP {
@@ -106,6 +115,29 @@ func newTestRP(t *testing.T) *testRP {
 		if u == nil {
 			fail(w, io.EOF)
 			return
+		}
+		if rp.attestationRoots != nil {
+			x5c, _ := parsed.Response.AttestationObject.AttStatement["x5c"].([]any)
+			var certs []*x509.Certificate
+			for _, raw := range x5c {
+				if b, ok := raw.([]byte); ok {
+					if c, err := x509.ParseCertificate(b); err == nil {
+						certs = append(certs, c)
+					}
+				}
+			}
+			if len(certs) == 0 {
+				fail(w, errors.New("attestation without a certificate"))
+				return
+			}
+			inter := x509.NewCertPool()
+			for _, c := range certs[1:] {
+				inter.AddCert(c)
+			}
+			if _, err := certs[0].Verify(x509.VerifyOptions{Roots: rp.attestationRoots, Intermediates: inter, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil {
+				fail(w, fmt.Errorf("attestation certificate not trusted: %w", err))
+				return
+			}
 		}
 		cred, err := rp.wa.CreateCredential(u, *sess, parsed)
 		if err != nil {
@@ -313,7 +345,11 @@ func TestWebAuthnAgainstRP(t *testing.T) {
 	// Every registration tamper is rejected by a correct RP.
 	for _, tm := range registerTampers {
 		r := run(t, "webauthn.register", with(M{"username": "tamper-" + tm, "tamper": tm, "attestation_format": "packed"}), nil)
-		wantStatus(t, r, "server rejects "+tamperWhat[tm], "pass")
+		want := "pass"
+		if tm == "broken_attestation_chain" { // this RP trusts no attestation roots
+			want = "warn"
+		}
+		wantStatus(t, r, "server rejects "+tamperWhat[tm], want)
 		if r["credential"] != nil {
 			t.Errorf("%s: a tampered registration returned a credential", tm)
 		}
@@ -488,5 +524,75 @@ func TestWebAuthnExtensions(t *testing.T) {
 	r = run(t, "webauthn.register", M{"options": mk(`{}`, `{}`), "origin": "https://example.com"}, nil)
 	if len(r["credential_response"].(M)["clientExtensionResults"].(M)) != 0 {
 		t.Error("extension results without a request")
+	}
+}
+
+// Attestation with a certificate: packed with x5c and fido-u2f, accepted by
+// a conforming RP, and the certificate tampers rejected by an RP that
+// checks attestation against its trusted roots.
+func TestWebAuthnCertificateAttestation(t *testing.T) {
+	rp := newTestRP(t)
+	rp.direct = true
+	ca, err := newTestCA("Example Attestation Root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, _ := x509.MarshalPKCS8PrivateKey(ca.key)
+	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})) + string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	reg := func(user string, extra M) M {
+		m := M{"server": rp.url, "username": user}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return run(t, "webauthn.register", m, nil)
+	}
+
+	for _, f := range []string{"packed-x5c", "fido-u2f"} {
+		// A throwaway CA: go-webauthn verifies the signature and, for
+		// packed, the certificate requirements, without trusting a root.
+		r := reg("throwaway-"+f, M{"attestation_format": f})
+		noFailures(t, r)
+		att := r["attestation"].(M)
+		if att["root"] == nil || att["format"] != f {
+			t.Errorf("%s: attestation info %v", f, att)
+		}
+		// The decoder agrees with the RP about the signature.
+		cred := r["credential_response"].(M)["response"].(M)
+		d := run(t, "webauthn.decode", M{"attestation_object": cred["attestationObject"], "client_data_json": cred["clientDataJSON"]}, nil)
+		wantStatus(t, d, "attestation signature ("+map[string]string{"packed-x5c": "packed", "fido-u2f": "fido-u2f"}[f], "pass")
+	}
+	if r := reg("aaguid", M{"attestation_format": "packed-x5c"}); r["attestation"].(M)["aaguid"] != formatAAGUID(idpdbgAAGUID) {
+		t.Errorf("AAGUID: %v", r["attestation"])
+	}
+	if _, err := tryOp(t, "webauthn.register", M{"server": rp.url, "username": "u2f-eddsa", "attestation_format": "fido-u2f", "alg": -8}); err == nil {
+		t.Error("fido-u2f with an EdDSA credential was not refused")
+	}
+
+	// An RP that trusts only this CA.
+	rp.attestationRoots = x509.NewCertPool()
+	rp.attestationRoots.AddCert(ca.cert)
+	for _, f := range []string{"packed-x5c", "fido-u2f"} {
+		r := reg("trusted-"+f, M{"attestation_format": f, "attestation_ca": caPEM})
+		noFailures(t, r)
+		wantStatus(t, r, "server accepts the registration", "pass")
+		if r["attestation"].(M)["root"] != nil {
+			t.Errorf("%s: the caller's CA reported as throwaway", f)
+		}
+		r = reg("impostor-"+f, M{"attestation_format": f, "attestation_ca": caPEM, "tamper": "broken_attestation_chain"})
+		wantStatus(t, r, "server rejects "+tamperWhat["broken_attestation_chain"], "pass")
+		if c := checkOf(r, "server rejects "+tamperWhat["broken_attestation_chain"]); !strings.Contains(c.Detail, "attestation certificate not trusted") {
+			t.Errorf("%s impostor rejected for another reason: %s", f, c.Detail)
+		}
+	}
+	// A throwaway CA is not trusted by that RP either.
+	wantStatus(t, reg("untrusted", M{"attestation_format": "packed-x5c"}), "server accepts the registration", "fail")
+	// The packed certificate requirements, which go-webauthn checks itself.
+	r := reg("bad-cert", M{"attestation_ca": caPEM, "tamper": "bad_attestation_certificate"})
+	wantStatus(t, r, "server rejects "+tamperWhat["bad_attestation_certificate"], "pass")
+	if _, err := tryOp(t, "webauthn.register", M{"server": rp.url, "username": "x", "attestation_format": "fido-u2f", "tamper": "bad_attestation_certificate"}); err == nil {
+		t.Error("bad_attestation_certificate with fido-u2f was not refused")
+	}
+	if _, err := tryOp(t, "webauthn.register", M{"server": rp.url, "username": "x", "attestation_format": "packed-x5c", "attestation_ca": ca.cert.Raw}); err == nil {
+		t.Error("an attestation_ca without its key was accepted")
 	}
 }

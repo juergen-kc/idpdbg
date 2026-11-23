@@ -508,24 +508,28 @@ func (a *rpAPI) submit(c *Ctx, credJSON M) (*httpResult, error) {
 
 // ---- tampering ----
 
-var registerTampers = []string{"wrong_origin", "wrong_rp_id_hash", "wrong_challenge", "wrong_type", "no_user_present", "bad_attestation_signature"}
+var registerTampers = []string{"wrong_origin", "wrong_rp_id_hash", "wrong_challenge", "wrong_type", "no_user_present", "bad_attestation_signature",
+	"broken_attestation_chain", "bad_attestation_certificate"}
 var loginTampers = []string{"wrong_origin", "wrong_rp_id_hash", "wrong_challenge", "wrong_type", "no_user_present", "bad_signature", "counter_not_increased", "no_user_verified"}
 
 var tamperWhat = map[string]string{
-	"wrong_origin":              "client data from another origin (https://evil.example)",
-	"wrong_rp_id_hash":          "authenticator data for another RP ID (evil.example)",
-	"wrong_challenge":           "a challenge the server never issued",
-	"wrong_type":                "client data of the other ceremony's type",
-	"no_user_present":           "authenticator data without the user-present flag",
-	"bad_attestation_signature": "a corrupted attestation signature",
-	"bad_signature":             "a corrupted assertion signature",
-	"counter_not_increased":     "a signature counter that did not increase",
-	"no_user_verified":          "no user verification although the server required it",
+	"wrong_origin":                "client data from another origin (https://evil.example)",
+	"wrong_rp_id_hash":            "authenticator data for another RP ID (evil.example)",
+	"wrong_challenge":             "a challenge the server never issued",
+	"wrong_type":                  "client data of the other ceremony's type",
+	"no_user_present":             "authenticator data without the user-present flag",
+	"bad_attestation_signature":   "a corrupted attestation signature",
+	"broken_attestation_chain":    "an attestation certificate from an impostor CA with the trusted CA's name",
+	"bad_attestation_certificate": "an attestation certificate that breaks the packed requirements (a CA certificate, wrong OU)",
+	"bad_signature":               "a corrupted assertion signature",
+	"counter_not_increased":       "a signature counter that did not increase",
+	"no_user_verified":            "no user verification although the server required it",
 }
 
 var tamperRef = map[string]string{"wrong_origin": "WebAuthn §7.1 step 9 / §7.2 step 13", "wrong_rp_id_hash": "WebAuthn §7.1 step 13 / §7.2 step 15",
 	"wrong_challenge": "WebAuthn §7.1 step 8 / §7.2 step 12", "wrong_type": "WebAuthn §7.1 step 7 / §7.2 step 11",
 	"no_user_present": "WebAuthn §7.1 step 14 / §7.2 step 16", "bad_attestation_signature": "WebAuthn §7.1 step 19",
+	"broken_attestation_chain": "WebAuthn §7.1 steps 20-21", "bad_attestation_certificate": "WebAuthn §8.2.1",
 	"bad_signature": "WebAuthn §7.2 step 20", "counter_not_increased": "WebAuthn §7.2 step 21", "no_user_verified": "WebAuthn §7.2 step 17"}
 
 func tamperVerdict(cs *Checks, tamper string, res *httpResult) {
@@ -536,6 +540,8 @@ func tamperVerdict(cs *Checks, tamper string, res *httpResult) {
 		cs.add(name, "pass", "rejected: "+detail, tamperRef[tamper])
 	case tamper == "counter_not_increased":
 		cs.add(name, "warn", "accepted: the RP may only flag a possible cloned authenticator, but it should at least notice ("+detail+")", tamperRef[tamper])
+	case tamper == "broken_attestation_chain":
+		cs.add(name, "warn", "accepted: the RP does not check attestation against trusted roots. That is fine if it does not rely on attestation (most consumer sites); an RP that restricts authenticator models must reject it ("+detail+")", tamperRef[tamper])
 	default:
 		cs.add(name, "fail", "accepted: "+detail, tamperRef[tamper])
 	}
@@ -563,7 +569,11 @@ func runWebAuthnRegister(c *Ctx) (M, error) {
 		return nil, errors.New("pass options (PublicKeyCredentialCreationOptions JSON), server (a FIDO conformance API), or options_url and result_url")
 	} else {
 		sel := M{"userVerification": "preferred", "residentKey": "preferred"}
-		if o, err = api.fetchOptions(c, &cs, M{"username": c.Str("username"), "displayName": c.Str("username"), "authenticatorSelection": sel, "attestation": "none"}); err != nil {
+		conveyance := "none" // ask for direct attestation when one will be sent
+		if c.Str("attestation_format") != "none" || strings.Contains(tamper, "attestation") {
+			conveyance = "direct"
+		}
+		if o, err = api.fetchOptions(c, &cs, M{"username": c.Str("username"), "displayName": c.Str("username"), "authenticatorSelection": sel, "attestation": conveyance}); err != nil {
 			return nil, err
 		}
 	}
@@ -659,14 +669,34 @@ func runWebAuthnRegister(c *Ctx) (M, error) {
 		if tamper == "no_user_present" {
 			flags &^= 0x01
 		}
-		attested := append(make([]byte, 16), byte(len(credID)>>8), byte(len(credID))) // AAGUID: zeros
+		attFmt := c.Str("attestation_format")
+		// The certificate tampers need a certificate: packed-x5c unless the
+		// caller chose fido-u2f (which has no certificate requirements).
+		switch {
+		case tamper == "bad_attestation_certificate" && attFmt == "fido-u2f":
+			return nil, errors.New("tamper bad_attestation_certificate needs attestation_format packed-x5c: fido-u2f sets no certificate requirements")
+		case (tamper == "broken_attestation_chain" || tamper == "bad_attestation_certificate") && attFmt != "fido-u2f":
+			attFmt = "packed-x5c"
+		}
+		aaguid := make([]byte, 16) // zeros: no model to name
+		if attFmt == "packed-x5c" {
+			aaguid = idpdbgAAGUID
+		}
+		attested := append(append([]byte{}, aaguid...), byte(len(credID)>>8), byte(len(credID)))
 		attested = append(append(attested, credID...), cborEncode(cose)...)
 		ad := authenticatorData(rpHashID, flags, 0, attested)
 		cdHash := sha256.Sum256(cd)
 
-		attFmt := c.Str("attestation_format")
 		stmt := map[any]any{}
-		if attFmt == "packed" || tamper == "bad_attestation_signature" {
+		if attFmt == "packed-x5c" || attFmt == "fido-u2f" {
+			rpHash := sha256.Sum256([]byte(rpHashID))
+			if stmt, err = certAttestation(c, attFmt, tamper, ad, cdHash[:], rpHash[:], credID, key, out); err != nil {
+				return nil, err
+			}
+			if attFmt == "packed-x5c" {
+				attFmt = "packed"
+			}
+		} else if attFmt == "packed" || tamper == "bad_attestation_signature" {
 			attFmt = "packed"
 			sig, err := webauthnSign(key, alg, append(append([]byte{}, ad...), cdHash[:]...))
 			if err != nil {
@@ -927,7 +957,7 @@ func init() {
 		&Op{
 			Name: "webauthn.register",
 			Summary: "Register a passkey with a relying party: fetches (or takes) the creation options and checks them (challenge, user handle, algorithms, RP ID against the origin), makes the credential, submits it and reports whether the server accepts it. " +
-				"The authenticator is a software one (ES256, EdDSA or RS256; none or packed self attestation) or, with authenticator=usb, a real security key over CTAP2 or U2F, whose attestation is verified locally (the person must touch the key: tell them first). " +
+				"The authenticator is a software one (ES256, EdDSA or RS256; none, packed self attestation, packed with an attestation certificate chain, or fido-u2f) or, with authenticator=usb, a real security key over CTAP2 or U2F, whose attestation is verified locally (the person must touch the key: tell them first). " +
 				"Returns the credential for webauthn.login. tamper sends a deliberately broken response to test that the server rejects it.",
 			Mutating: true,
 			Params: joinParams(common, []Param{
@@ -935,7 +965,8 @@ func init() {
 				{Name: "resident_key", Type: "bool", Desc: "Security key: make a discoverable credential (stored on the key, using one of its slots)"},
 				{Name: "metadata", Type: "bool", Desc: "Security key: check the key's attestation against the FIDO Metadata Service (model, certification, security status, chain to the model's root)"},
 				{Name: "alg", Type: "int", Desc: "Software authenticator: COSE algorithm (-7 ES256, -8 EdDSA, -257 RS256); default the server's first supported"},
-				{Name: "attestation_format", Type: "string", Enum: []string{"none", "packed"}, Default: "none", Desc: "Attestation statement format (packed is self attestation)"},
+				{Name: "attestation_format", Type: "string", Enum: []string{"none", "packed", "packed-x5c", "fido-u2f"}, Default: "none", Desc: "Software authenticator: attestation statement format: none, packed self attestation, packed with an attestation certificate (x5c), or fido-u2f (ES256 only)"},
+				{Name: "attestation_ca", Type: "string", Path: true, Explicit: true, Desc: "With packed-x5c or fido-u2f: certificate and private key (PEM) of the CA that issues the attestation certificate, one the relying party trusts; default a throwaway CA, whose root the result shows"},
 				{Name: "backup_eligible", Type: "bool", Desc: "Mark the credential as a synced passkey (BE and BS flags)"},
 				{Name: "tamper", Type: "string", Enum: registerTampers, Desc: "Send a broken response; the check passes if the server rejects it"},
 				{Name: "out", Type: "string", Desc: "Also write the credential to this file (CLI only)"},

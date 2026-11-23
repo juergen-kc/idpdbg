@@ -35,6 +35,16 @@ as the release notes, and refuses a tag without one.
   CI signs in to Keycloak, logs out there, and checks the session is gone.
 - SAML IdP metadata: a SingleLogoutService's ResponseLocation is used for
   logout responses.
+- `webauthn register`: the software authenticator also attests with a
+  certificate: `--attestation-format packed-x5c` (packed with an
+  attestation certificate meeting WebAuthn §8.2.1, and idpdbg's AAGUID) or
+  `fido-u2f`. `--attestation-ca` names the CA that issues the certificate,
+  one the relying party trusts; without it a throwaway CA is used and its
+  root shown. Two new tampers test the relying party's checks:
+  `broken_attestation_chain` (a certificate from an impostor CA with the
+  trusted CA's name; accepting it is a warning, since most relying parties
+  rightly ignore attestation) and `bad_attestation_certificate` (a CA
+  certificate with the wrong OU).
 
 ## [0.25.0] - 2026-11-23
 
