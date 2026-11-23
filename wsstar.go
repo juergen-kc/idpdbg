@@ -578,7 +578,7 @@ func init() {
 		{Name: "metadata", Type: "string", Path: true, Desc: "Federation metadata (URL, path or inline XML) for the STS signing certificates"},
 		{Name: "sts_cert", Type: "string", Path: true, Desc: "STS signing certificate (PEM)"},
 		{Name: "leeway", Type: "int", Desc: "Clock skew allowance in seconds", Default: 120},
-		{Name: "rp_key", Type: "string", Path: true, Desc: "Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured"},
+		{Name: "rp_key", Type: "string", Path: true, Explicit: true, Desc: "Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured"},
 	}
 	join := joinParams
 	register(

@@ -22,7 +22,7 @@ MCP tool: `wstrust_issue`.
 | `--metadata` | string | Federation metadata (URL, path or inline XML) for the STS signing certificates. May be a file path (CLI or profile only). |
 | `--sts-cert` | string | STS signing certificate (PEM). May be a file path (CLI or profile only). |
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
-| `--rp-key` | string | Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured. May be a file path (CLI or profile only). |
+| `--rp-key` | string | Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 
 Plus the [common parameters](README.md#common-parameters).
 
