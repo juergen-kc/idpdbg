@@ -144,34 +144,55 @@ func analyzeRSTR(cs *Checks, root *etree.Element, ex *samlExpect, ref string) (M
 	if !cs.ok(rst != nil && len(rst.ChildElements()) > 0, "RSTR carries a token", "", ref) {
 		return out, nil
 	}
-	tok := rst.ChildElements()[0]
+	describeToken(cs, rst.ChildElements()[0], ex, ref, out, true)
+	return out, nil
+}
+
+// describeToken checks the token in an RSTR; an encrypted token is
+// decrypted with the relying party's key and checked in turn.
+func describeToken(cs *Checks, tok *etree.Element, ex *samlExpect, ref string, out M, outer bool) {
 	switch {
 	case tok.Tag == "Assertion" && tok.NamespaceURI() == nsSAML11:
 		out["token"] = describeSAML11(cs, tok, ex)
 	case tok.Tag == "Assertion":
 		nsCtx, err := etreeutils.NSBuildParentContext(tok)
 		if err != nil {
-			return out, err
+			cs.add("token", "fail", err.Error(), ref)
+			return
 		}
 		det, err := etreeutils.NSDetatch(nsCtx, tok)
 		if err != nil {
-			return out, err
+			cs.add("token", "fail", err.Error(), ref)
+			return
 		}
 		d := etree.NewDocument()
 		d.SetRoot(det)
 		b, _ := d.WriteToBytes()
 		a, err := analyzeSAML(b, ex)
 		if err != nil {
-			return out, err
+			cs.add("token", "fail", err.Error(), ref)
+			return
 		}
 		*cs = append(*cs, a["checks"].(Checks)...)
 		out["token"] = a["assertions"]
-	case tok.Tag == "EncryptedData" || tok.Tag == "EncryptedAssertion":
-		cs.add("token", "info", "the token is encrypted to the relying party; decryption of WS-* tokens is not supported", ref)
+	case outer && (tok.Tag == "EncryptedData" || tok.Tag == "EncryptedAssertion"):
+		out["token_encrypted"] = true
+		encryptionAlgChecks(cs, tok)
+		if ex.SPKey == nil {
+			cs.add("token: decryption", "warn", "the token is encrypted to the relying party; pass rp_key (its private key) to decrypt and check it", "XML Encryption 1.1 §4")
+			return
+		}
+		a, err := decryptAssertion(tok, ex.SPKey)
+		if err != nil {
+			cs.add("token: decryption", "fail", err.Error(), "XML Encryption 1.1 §4")
+			return
+		}
+		cs.add("token: decryption", "pass", "decrypted with the relying party's private key", "XML Encryption 1.1 §4")
+		out["decrypted_token_xml"] = prettyXML(a)
+		describeToken(cs, a, ex, ref, out, false)
 	default:
 		cs.add("token type", "info", "token element "+tok.Tag+" is shown but not analysed", ref)
 	}
-	return out, nil
 }
 
 // ---- WS-Federation ----
@@ -251,6 +272,20 @@ func wsfedTrust(c *Ctx) (*fedMeta, []*x509.Certificate, error) {
 	return meta, trusted, nil
 }
 
+// wsExpect is what a token for audience must satisfy, with the relying
+// party's key to decrypt it.
+func wsExpect(c *Ctx, trusted []*x509.Certificate, audience string) (*samlExpect, error) {
+	ex := &samlExpect{Trusted: trusted, Audience: audience, Leeway: time.Duration(c.Int("leeway")) * time.Second}
+	if s := c.Str("rp_key"); s != "" {
+		k, err := loadRSAKey(s)
+		if err != nil {
+			return nil, fmt.Errorf("rp_key: %w", err)
+		}
+		ex.SPKey = k
+	}
+	return ex, nil
+}
+
 func runWSFedLogin(c *Ctx) (M, error) {
 	meta, trusted, err := wsfedTrust(c)
 	if err != nil {
@@ -309,7 +344,11 @@ func runWSFedLogin(c *Ctx) (M, error) {
 	var cs Checks
 	cs.ok(vals.Get("wa") == "wsignin1.0", "wa is wsignin1.0", "wa="+vals.Get("wa"), wsfedRef)
 	cs.ok(vals.Get("wctx") == wctx, "wctx returned unchanged", "", wsfedRef)
-	out, err := analyzeWResult(&cs, vals.Get("wresult"), &samlExpect{Trusted: trusted, Audience: c.Str("wtrealm"), Leeway: time.Duration(c.Int("leeway")) * time.Second})
+	ex, err := wsExpect(c, trusted, c.Str("wtrealm"))
+	if err != nil {
+		return nil, err
+	}
+	out, err := analyzeWResult(&cs, vals.Get("wresult"), ex)
 	if out == nil {
 		out = M{}
 	}
@@ -479,7 +518,11 @@ func runWSTrustIssue(c *Ctx) (M, error) {
 		return out, nil
 	}
 	cs.ok(status == 200, "STS response", fmt.Sprintf("HTTP %d", status), "WS-Trust 1.3 §4")
-	r, err := analyzeRSTR(&cs, root, &samlExpect{Trusted: trusted, Audience: c.Str("applies_to"), Leeway: time.Duration(c.Int("leeway")) * time.Second}, "WS-Trust 1.3 §4.4")
+	ex, err := wsExpect(c, trusted, c.Str("applies_to"))
+	if err != nil {
+		return nil, err
+	}
+	r, err := analyzeRSTR(&cs, root, ex, "WS-Trust 1.3 §4.4")
 	for k, val := range r {
 		out[k] = val
 	}
@@ -535,6 +578,7 @@ func init() {
 		{Name: "metadata", Type: "string", Path: true, Desc: "Federation metadata (URL, path or inline XML) for the STS signing certificates"},
 		{Name: "sts_cert", Type: "string", Path: true, Desc: "STS signing certificate (PEM)"},
 		{Name: "leeway", Type: "int", Desc: "Clock skew allowance in seconds", Default: 120},
+		{Name: "rp_key", Type: "string", Path: true, Desc: "Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured"},
 	}
 	join := joinParams
 	register(
@@ -562,7 +606,7 @@ func init() {
 		&Op{
 			Name:    "wsfed.login",
 			Browser: true,
-			Summary: "Run WS-Federation passive sign-in (wa=wsignin1.0): send the browser to the STS, capture the token posted to a local wreply, and check wctx, the RSTR (lifetime, AppliesTo) and the SAML 1.1 or 2.0 token (signature, audience = wtrealm, validity). Blocks until the person signs in.",
+			Summary: "Run WS-Federation passive sign-in (wa=wsignin1.0): send the browser to the STS, capture the token posted to a local wreply, and check wctx, the RSTR (lifetime, AppliesTo) and the SAML 1.1 or 2.0 token (signature, audience = wtrealm, validity), decrypting it with rp_key if the STS encrypted it. Blocks until the person signs in.",
 			Params: join([]Param{
 				{Name: "sts_url", Type: "string", Desc: "Passive requestor endpoint, overriding metadata (e.g. https://adfs.example.com/adfs/ls/)"},
 				{Name: "wtrealm", Type: "string", Desc: "Realm (relying party identifier) registered at the STS", Default: "urn:idpdbg"},
@@ -575,7 +619,7 @@ func init() {
 		},
 		&Op{
 			Name:    "wsfed.decode",
-			Summary: "Analyse a WS-Federation wresult (RequestSecurityTokenResponse) offline: lifetime, AppliesTo, and the SAML 1.1 or 2.0 token with its signature, audience and validity.",
+			Summary: "Analyse a WS-Federation wresult (RequestSecurityTokenResponse) offline: lifetime, AppliesTo, and the SAML 1.1 or 2.0 token with its signature, audience and validity; an encrypted token (xenc:EncryptedData, as AD FS sends it, or an EncryptedAssertion) is decrypted with rp_key and its algorithms checked.",
 			Params: join([]Param{
 				{Name: "wresult", Type: "string", Required: true, File: true, Desc: "The wresult XML (CLI: @file or - for stdin)"},
 				{Name: "wtrealm", Type: "string", Desc: "Expected realm (AppliesTo and audience)"}}, stsTrust),
@@ -585,7 +629,11 @@ func init() {
 					return nil, err
 				}
 				var cs Checks
-				out, err := analyzeWResult(&cs, c.Str("wresult"), &samlExpect{Trusted: trusted, Audience: c.Str("wtrealm"), Leeway: time.Duration(c.Int("leeway")) * time.Second})
+				ex, err := wsExpect(c, trusted, c.Str("wtrealm"))
+				if err != nil {
+					return nil, err
+				}
+				out, err := analyzeWResult(&cs, c.Str("wresult"), ex)
 				if out == nil {
 					out = M{}
 				}
@@ -617,7 +665,7 @@ func init() {
 		},
 		&Op{
 			Name:    "wstrust.issue",
-			Summary: "Request a token from a WS-Trust STS (RST Issue over SOAP with a WS-Security UsernameToken, as AD FS usernamemixed expects) and check the response: SOAP faults, RSTR lifetime and AppliesTo, and the SAML 1.1 or 2.0 token's signature, audience and validity.",
+			Summary: "Request a token from a WS-Trust STS (RST Issue over SOAP with a WS-Security UsernameToken, as AD FS usernamemixed expects) and check the response: SOAP faults, RSTR lifetime and AppliesTo, and the SAML 1.1 or 2.0 token's signature, audience and validity, decrypting it with rp_key if the STS encrypted it.",
 			Params: join([]Param{
 				{Name: "endpoint", Type: "string", Required: true, Desc: "STS endpoint, e.g. https://adfs.example.com/adfs/services/trust/13/usernamemixed"},
 				{Name: "applies_to", Type: "string", Required: true, Desc: "Relying party identifier the token is for"},

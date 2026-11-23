@@ -6,7 +6,7 @@
 
 ## wstrust issue
 
-Request a token from a WS-Trust STS (RST Issue over SOAP with a WS-Security UsernameToken, as AD FS usernamemixed expects) and check the response: SOAP faults, RSTR lifetime and AppliesTo, and the SAML 1.1 or 2.0 token's signature, audience and validity.
+Request a token from a WS-Trust STS (RST Issue over SOAP with a WS-Security UsernameToken, as AD FS usernamemixed expects) and check the response: SOAP faults, RSTR lifetime and AppliesTo, and the SAML 1.1 or 2.0 token's signature, audience and validity, decrypting it with rp_key if the STS encrypted it.
 
 MCP tool: `wstrust_issue`.
 
@@ -22,6 +22,7 @@ MCP tool: `wstrust_issue`.
 | `--metadata` | string | Federation metadata (URL, path or inline XML) for the STS signing certificates. May be a file path (CLI or profile only). |
 | `--sts-cert` | string | STS signing certificate (PEM). May be a file path (CLI or profile only). |
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
+| `--rp-key` | string | Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured. May be a file path (CLI or profile only). |
 
 Plus the [common parameters](README.md#common-parameters).
 

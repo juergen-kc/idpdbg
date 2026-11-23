@@ -8,6 +8,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -371,10 +372,14 @@ func checkSignatureID(cs *Checks, what string, el *etree.Element, trusted []*x50
 	return true, trustKnown
 }
 
+// decryptAssertion decrypts a SAML EncryptedAssertion, or a bare
+// xenc:EncryptedData as WS-* security token services send it.
 func decryptAssertion(enc *etree.Element, key *rsa.PrivateKey) (*etree.Element, error) {
-	data := kid(enc, "EncryptedData")
-	if data == nil {
-		return nil, errors.New("EncryptedAssertion has no EncryptedData")
+	data := enc
+	if enc.Tag != "EncryptedData" {
+		if data = kid(enc, "EncryptedData"); data == nil {
+			return nil, errors.New("EncryptedAssertion has no EncryptedData")
+		}
 	}
 	var encKeys []*etree.Element
 	findAll(enc, "EncryptedKey", &encKeys)
@@ -394,8 +399,17 @@ func decryptAssertion(enc *etree.Element, key *rsa.PrivateKey) (*etree.Element, 
 		}
 	}
 	if err != nil {
+		var to []string
+		for _, ek := range encKeys {
+			if r := encryptedKeyRecipient(ek); r != "" {
+				to = append(to, r)
+			}
+		}
+		if len(to) > 0 {
+			err = fmt.Errorf("%w; the key was encrypted for %s", err, strings.Join(to, ", "))
+		}
 		if len(encKeys) > 1 {
-			return nil, fmt.Errorf("none of the %d EncryptedKey elements unwraps with the SP private key; last error: %w", len(encKeys), err)
+			return nil, fmt.Errorf("none of the %d EncryptedKey elements unwraps with the private key; last error: %w", len(encKeys), err)
 		}
 		return nil, err
 	}
@@ -404,6 +418,40 @@ func decryptAssertion(enc *etree.Element, key *rsa.PrivateKey) (*etree.Element, 
 		return nil, fmt.Errorf("EncryptedData CipherValue: %w", err)
 	}
 	return decryptContent(data, cek, ct)
+}
+
+// encryptedKeyRecipient says which certificate an EncryptedKey names in
+// its KeyInfo (a certificate, its SHA-1 thumbprint, or issuer and serial),
+// so a wrong decryption key can be told from a broken token.
+func encryptedKeyRecipient(ek *etree.Element) string {
+	ki := kid(ek, "KeyInfo")
+	if ki == nil {
+		return ""
+	}
+	var els []*etree.Element
+	findAll(ki, "X509Certificate", &els)
+	for _, e := range els {
+		if der, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(text(e)), "")); err == nil {
+			if c, err := x509.ParseCertificate(der); err == nil {
+				return fmt.Sprintf("the certificate %s (SHA-1 %X)", c.Subject, sha1.Sum(c.Raw))
+			}
+		}
+	}
+	els = nil
+	findAll(ki, "KeyIdentifier", &els)
+	for _, e := range els {
+		if strings.HasSuffix(e.SelectAttrValue("ValueType", ""), "ThumbprintSHA1") {
+			if b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text(e))); err == nil {
+				return fmt.Sprintf("the certificate with SHA-1 thumbprint %X", b)
+			}
+		}
+	}
+	els = nil
+	findAll(ki, "X509IssuerSerial", &els)
+	for _, e := range els {
+		return fmt.Sprintf("the certificate issued by %s with serial %s", text(kid(e, "X509IssuerName")), text(kid(e, "X509SerialNumber")))
+	}
+	return ""
 }
 
 func unwrapEncryptedKey(ek *etree.Element, key *rsa.PrivateKey, cipherValue func(*etree.Element) ([]byte, error)) ([]byte, error) {

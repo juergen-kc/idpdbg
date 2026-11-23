@@ -18,7 +18,7 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## wsfed login
 
-Run WS-Federation passive sign-in (wa=wsignin1.0): send the browser to the STS, capture the token posted to a local wreply, and check wctx, the RSTR (lifetime, AppliesTo) and the SAML 1.1 or 2.0 token (signature, audience = wtrealm, validity). Blocks until the person signs in.
+Run WS-Federation passive sign-in (wa=wsignin1.0): send the browser to the STS, capture the token posted to a local wreply, and check wctx, the RSTR (lifetime, AppliesTo) and the SAML 1.1 or 2.0 token (signature, audience = wtrealm, validity), decrypting it with rp_key if the STS encrypted it. Blocks until the person signs in.
 
 MCP tool: `wsfed_login`. Opens a browser and waits for a person.
 
@@ -34,6 +34,7 @@ MCP tool: `wsfed_login`. Opens a browser and waits for a person.
 | `--metadata` | string | Federation metadata (URL, path or inline XML) for the STS signing certificates. May be a file path (CLI or profile only). |
 | `--sts-cert` | string | STS signing certificate (PEM). May be a file path (CLI or profile only). |
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
+| `--rp-key` | string | Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured. May be a file path (CLI or profile only). |
 | `--open-browser` | bool | Open the system browser automatically. Default `true`. |
 | `--wait` | int | Seconds to wait for the person to finish in the browser. Default `180`. |
 
@@ -41,7 +42,7 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## wsfed decode
 
-Analyse a WS-Federation wresult (RequestSecurityTokenResponse) offline: lifetime, AppliesTo, and the SAML 1.1 or 2.0 token with its signature, audience and validity.
+Analyse a WS-Federation wresult (RequestSecurityTokenResponse) offline: lifetime, AppliesTo, and the SAML 1.1 or 2.0 token with its signature, audience and validity; an encrypted token (xenc:EncryptedData, as AD FS sends it, or an EncryptedAssertion) is decrypted with rp_key and its algorithms checked.
 
 MCP tool: `wsfed_decode`.
 
@@ -52,6 +53,7 @@ MCP tool: `wsfed_decode`.
 | `--metadata` | string | Federation metadata (URL, path or inline XML) for the STS signing certificates. May be a file path (CLI or profile only). |
 | `--sts-cert` | string | STS signing certificate (PEM). May be a file path (CLI or profile only). |
 | `--leeway` | int | Clock skew allowance in seconds. Default `120`. |
+| `--rp-key` | string | Relying party RSA private key (PEM inline or a path) to decrypt a token the STS encrypted to the relying party's certificate, as AD FS does when an encryption certificate is configured. May be a file path (CLI or profile only). |
 
 Plus the [common parameters](README.md#common-parameters).
 

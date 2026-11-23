@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -153,6 +154,7 @@ func TestWSFederation(t *testing.T) {
 
 func TestWSTrust(t *testing.T) {
 	key, cert, certPEM, _ := selfSigned(t)
+	rpKey, rpCert, _, rpKeyPEM := selfSigned(t)
 	sts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		doc := etree.NewDocument()
 		doc.ReadFrom(r.Body)
@@ -174,8 +176,12 @@ func TestWSTrust(t *testing.T) {
 			var ap []*etree.Element
 			findAll(doc.Root(), "Address", &ap)
 			appliesTo := text(ap[len(ap)-1])
+			tok := saml2Assertion(t, key, cert, appliesTo)
+			if appliesTo == "urn:encrypted" { // a relying party with an encryption certificate
+				tok = encryptToken(t, tok, rpCert, &rpKey.PublicKey, encAES256GCM, encRSAOAEP11, false)
+			}
 			fmt.Fprint(w, env(`<trust:RequestSecurityTokenResponseCollection xmlns:trust="`+nsTrust13+`">`+
-				rstr(nsTrust13, appliesTo, saml2Assertion(t, key, cert, appliesTo))+
+				rstr(nsTrust13, appliesTo, tok)+
 				`</trust:RequestSecurityTokenResponseCollection>`))
 		case nsTrust13 + "/RST/Validate":
 			fmt.Fprint(w, env(`<trust:RequestSecurityTokenResponse xmlns:trust="`+nsTrust13+`"><trust:Status><trust:Code>`+nsTrust13+`/status/valid</trust:Code><trust:Reason>ok</trust:Reason></trust:Status></trust:RequestSecurityTokenResponse>`))
@@ -186,6 +192,18 @@ func TestWSTrust(t *testing.T) {
 	res := run(t, "wstrust.issue", base, nil)
 	noFailures(t, res)
 	for _, n := range []string{"STS response", "assertion: signature", "RSTR AppliesTo", "requested WS-Trust version"} {
+		wantStatus(t, res, n, "pass")
+	}
+	enc := M{"rp_key": rpKeyPEM}
+	for k, v := range base {
+		if _, set := enc[k]; !set {
+			enc[k] = v
+		}
+	}
+	enc["applies_to"] = "urn:encrypted"
+	res = run(t, "wstrust.issue", enc, nil)
+	noFailures(t, res)
+	for _, n := range []string{"token: decryption", "assertion: signature", "audience includes"} {
 		wantStatus(t, res, n, "pass")
 	}
 	bad := M{}
@@ -219,4 +237,100 @@ func TestWSTrust(t *testing.T) {
 	if c := checkOf(plain, "STS response"); c == nil || !strings.Contains(c.Detail, "plain HTTP") {
 		t.Errorf("password over plain HTTP not refused: %+v", c)
 	}
+}
+
+// encryptToken encrypts a token to the relying party's public key, as an
+// STS does: a bare xenc:EncryptedData (AD FS) or, with asAssertion, a SAML
+// 2.0 EncryptedAssertion. The EncryptedKey names the relying party's
+// certificate by thumbprint, as AD FS writes it.
+func encryptToken(t *testing.T, token string, rpCert *x509.Certificate, rpPub *rsa.PublicKey, dataAlg, keyAlg string, asAssertion bool) string {
+	t.Helper()
+	wrapped := encryptAssertion(t, "<w>"+token+"</w>", rpPub, dataAlg, keyAlg)
+	thumb := sha1.Sum(rpCert.Raw)
+	wrapped = strings.Replace(wrapped, "<xenc:CipherData>", `<ds:KeyInfo><o:SecurityTokenReference xmlns:o="`+nsWSSE+`"><o:KeyIdentifier ValueType="http://docs.oasis-open.org/wss/oasis-wss-soap-message-security-1.1#ThumbprintSHA1">`+
+		base64.StdEncoding.EncodeToString(thumb[:])+`</o:KeyIdentifier></o:SecurityTokenReference></ds:KeyInfo><xenc:CipherData>`, 1)
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(wrapped); err != nil {
+		t.Fatal(err)
+	}
+	el := kid(doc.Root(), "EncryptedAssertion")
+	if !asAssertion {
+		el = kid(el, "EncryptedData")
+	}
+	ctx, _ := etreeutils.NSBuildParentContext(el)
+	det, _ := etreeutils.NSDetatch(ctx, el)
+	d := etree.NewDocument()
+	d.SetRoot(det)
+	s, _ := d.WriteToString()
+	return s
+}
+
+func TestWSEncryptedTokens(t *testing.T) {
+	key, cert, certPEM, _ := selfSigned(t)
+	rpKey, rpCert, _, rpKeyPEM := selfSigned(t)
+	_, _, _, otherKeyPEM := selfSigned(t)
+
+	for _, tc := range []struct {
+		name, token, dataAlg, keyAlg string
+		asAssertion                  bool
+	}{
+		{"AD FS style: SAML 1.1 in EncryptedData, AES-256-CBC, RSA-OAEP", saml11Assertion(t, key, cert, "urn:idpdbg", "admin"), "http://www.w3.org/2001/04/xmlenc#aes256-cbc", encRSAOAEP, false},
+		{"SAML 2.0 in EncryptedData", saml2Assertion(t, key, cert, "urn:idpdbg"), encAES256GCM, encRSAOAEP11, false},
+		{"SAML 2.0 EncryptedAssertion", saml2Assertion(t, key, cert, "urn:idpdbg"), encAES256GCM, encRSAOAEP11, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wresult := rstr(nsTrust2005, "urn:idpdbg", encryptToken(t, tc.token, rpCert, &rpKey.PublicKey, tc.dataAlg, tc.keyAlg, tc.asAssertion))
+			args := M{"wresult": wresult, "wtrealm": "urn:idpdbg", "sts_cert": certPEM, "rp_key": rpKeyPEM}
+			res := run(t, "wsfed.decode", args, nil)
+			noFailures(t, res)
+			for _, n := range []string{"token: decryption", "assertion: signature", "audience includes", "RSTR AppliesTo"} {
+				wantStatus(t, res, n, "pass")
+			}
+			if res["token_encrypted"] != true || res["decrypted_token_xml"] == nil {
+				t.Errorf("output: %v", res)
+			}
+			if strings.HasSuffix(tc.dataAlg, "-cbc") {
+				wantStatus(t, res, "assertion: data encryption algorithm", "warn")
+				if res["token"].(M)["attributes"].(M)["http://schemas.example/claims/role"].([]string)[0] != "admin" {
+					t.Errorf("SAML 1.1 attributes: %v", res["token"])
+				}
+			}
+
+			// Without the key: said plainly, nothing else claimed.
+			delete(args, "rp_key")
+			r := run(t, "wsfed.decode", args, nil)
+			wantStatus(t, r, "token: decryption", "warn")
+			if checkOf(r, "assertion: signature") != nil {
+				t.Error("an encrypted token was checked without decrypting it")
+			}
+
+			// The wrong key: the error names the certificate the STS used.
+			args["rp_key"] = otherKeyPEM
+			r = run(t, "wsfed.decode", args, nil)
+			c := checkOf(r, "token: decryption")
+			if c == nil || c.Status != "fail" || !strings.Contains(c.Detail, fmt.Sprintf("%X", sha1.Sum(rpCert.Raw))) {
+				t.Errorf("wrong key: %+v", c)
+			}
+		})
+	}
+
+	// A forged token stays forged after decryption.
+	forged := strings.Replace(saml11Assertion(t, key, cert, "urn:idpdbg", "user"), ">user<", ">admin<", 1)
+	r := run(t, "wsfed.decode", M{"wresult": rstr(nsTrust2005, "urn:idpdbg", encryptToken(t, forged, rpCert, &rpKey.PublicKey, encAES256GCM, encRSAOAEP11, false)),
+		"sts_cert": certPEM, "rp_key": rpKeyPEM}, nil)
+	wantStatus(t, r, "token: decryption", "pass")
+	wantStatus(t, r, "assertion: signature", "fail")
+
+	// Tampered ciphertext under AES-GCM is refused.
+	enc := encryptToken(t, saml2Assertion(t, key, cert, "urn:idpdbg"), rpCert, &rpKey.PublicKey, encAES256GCM, encRSAOAEP11, false)
+	i := strings.LastIndex(enc, "<xenc:CipherValue>") + len("<xenc:CipherValue>") + 30
+	flip := map[byte]byte{'A': 'B', 'B': 'A'}
+	b := []byte(enc)
+	if nb, ok := flip[b[i]]; ok {
+		b[i] = nb
+	} else {
+		b[i] = 'A'
+	}
+	r = run(t, "wsfed.decode", M{"wresult": rstr(nsTrust2005, "urn:idpdbg", string(b)), "sts_cert": certPEM, "rp_key": rpKeyPEM}, nil)
+	wantStatus(t, r, "token: decryption", "fail")
 }

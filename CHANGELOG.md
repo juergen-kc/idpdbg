@@ -36,6 +36,14 @@ as the release notes, and refuses a tag without one.
   hold (removeFromCRL).
 - CI publishes a base and a delta CRL in Samba AD's configuration partition
   and reads them back through an AD CS-style location.
+- `wsfed login`, `wsfed decode` and `wstrust issue` decrypt tokens the STS
+  encrypted to the relying party (`--rp-key`): a bare `xenc:EncryptedData`
+  as AD FS sends it, or a SAML 2.0 `EncryptedAssertion`, then check the
+  token inside as before. The key and data encryption algorithms are
+  checked as for SAML (RSA PKCS#1 v1.5 and AES-CBC warn), and when the key
+  does not fit, the error names the certificate the STS encrypted to.
+- SAML decryption errors also name the certificate the IdP encrypted to,
+  when the EncryptedKey says.
 
 ## [0.24.0] - 2026-11-19
 

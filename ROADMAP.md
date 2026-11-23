@@ -16,7 +16,6 @@ item up.
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| Encrypted WS-Trust and WS-Federation tokens | AD FS commonly encrypts tokens for relying parties; reuses the SAML decryption code | S–M | Mock STS in the unit tests |
 | FAST armored by anonymous PKINIT | The usual way to get FAST armor without a machine account; builds on the PKINIT support | M | MIT KDC in CI |
 | IdP-initiated SAML logout | Receive and answer the IdP's LogoutRequest; logout is a frequent source of bugs | S–M | Keycloak in CI |
 | Software authenticator: packed attestation with a certificate chain, and fido-u2f | Tests whether a relying party really verifies attestation, including a negative test with a broken chain | M | Test relying party in the unit tests |

@@ -87,7 +87,7 @@ order.
 
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
 profiles and IdP-initiated logout; WS-Trust renew/cancel, proof-of-possession
-keys and encrypted WS-* tokens; OID4VCI authorization-code issuance, mdoc
+keys; OID4VCI authorization-code issuance, mdoc
 credentials and the Digital Credentials API; for the software authenticator, attestation formats beyond none and packed self attestation;
 on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,
