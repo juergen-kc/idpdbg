@@ -71,12 +71,14 @@ is in [development.md](development.md#interop-tests).
     roastable;
   - service tickets with MIT's PAC;
   - S4U2Self, and S4U2Proxy refused by its db2 database and explained;
-  - FAST;
-  - PKINIT in both Diffie-Hellman and public-key encryption mode.
+  - FAST, armored by a service account's TGT and by anonymous PKINIT;
+  - PKINIT in both Diffie-Hellman and public-key encryption mode, and
+    anonymous PKINIT with the KDC's contribution to the session key.
 
   MIT signs the request's nonce in KDCDHKeyInfo, the mirror image of
   Active Directory's AS-REP nonce, and encrypts the public-key reply with
-  3DES although AES was offered.
+  3DES although AES was offered. It sends PA_PKINIT_KX only for anonymous
+PKINIT, although RFC 8062 says it should with Diffie-Hellman too.
 - YubiKey 5 (PIV): key generation on the card, certificate import with a
   PIN-protected management key, and PKINIT.
 
@@ -91,5 +93,5 @@ keys; OID4VCI authorization-code issuance, mdoc
 credentials and the Digital Credentials API; for the software authenticator, attestation formats beyond none and packed self attestation;
 on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,
-PUKs or management keys, and secure messaging; FAST with anonymous PKINIT or cross-realm armor, and FAST factors other than encrypted challenge; the SPIRE Server API; XACML AttributeSelector (XPath) and ALFA;
+PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; the SPIRE Server API; XACML AttributeSelector (XPath) and ALFA;
 post-quantum certificates; indirect CRLs.

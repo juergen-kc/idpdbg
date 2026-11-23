@@ -14,6 +14,18 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- `krb pkinit --anonymous`: anonymous PKINIT (RFC 8062). A TGT for
+  WELLKNOWN/ANONYMOUS with no client certificate; checks the KDC's
+  signature and certificate, the anonymous name and ticket flag, and the
+  KDC's contribution to the session key (PA_PKINIT_KX).
+- `krb fast --armor-anonymous`: armor FAST with a TGT from anonymous
+  PKINIT, the usual way to armor without a machine account. Tested
+  against MIT krb5 in CI, through the encrypted challenge and a FAST
+  service ticket.
+- PKINIT in Diffie-Hellman mode also checks PA_PKINIT_KX when the KDC
+  sends it, and says so when it does not.
+
 ## [0.25.0] - 2026-11-23
 
 ### Added

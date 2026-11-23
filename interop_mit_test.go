@@ -107,12 +107,35 @@ func TestMITInterop(t *testing.T) {
 		kcWant(t, res, "FAST TGS exchange (service ticket issued)", "pass")
 	})
 
+	t.Run("krb fast armored by anonymous PKINIT", func(t *testing.T) {
+		res := kcRun(t, "krb.fast", mitArgs("alice", M{"keytab": mitKeytab(t, "alice"), "armor_anonymous": true,
+			"ca_cert": string(mitFile(t, "ca.pem")), "target_spn": "HTTP/web.mit.test"}), nil)
+		kcClean(t, res)
+		kcWant(t, res, "anonymous PKINIT: session key = KRB-FX-CF2", "pass")
+		kcWant(t, res, "anonymous PKINIT: KDC certificate names the realm's KDC", "pass")
+		kcWant(t, res, "armor TGT issued", "pass")
+		kcWant(t, res, "KDC encrypted challenge verifies", "pass")
+		kcWant(t, res, "FAST TGS exchange (service ticket issued)", "pass")
+		// Without the KDC's CA the armor authenticates no one, and says so.
+		res = kcRun(t, "krb.fast", mitArgs("alice", M{"keytab": mitKeytab(t, "alice"), "armor_anonymous": true}), nil)
+		kcWant(t, res, "anonymous PKINIT: KDC certificate chain verifies", "fail")
+		kcWant(t, res, "armor authenticates the KDC", "warn")
+	})
+
+	t.Run("krb pkinit: anonymous", func(t *testing.T) {
+		res := kcRun(t, "krb.pkinit", M{"realm": "MIT.TEST", "kdc": []any{mitKDC}, "anonymous": true, "ca_cert": string(mitFile(t, "ca.pem"))}, nil)
+		kcClean(t, res)
+		kcWant(t, res, "anonymous PKINIT: the ticket is flagged anonymous", "pass")
+		kcWant(t, res, "anonymous PKINIT: the KDC contributes to the session key", "pass")
+	})
+
 	t.Run("krb pkinit: Diffie-Hellman and public-key encryption", func(t *testing.T) {
 		res := kcRun(t, "krb.pkinit", mitArgs("alice", M{"pkinit_cert": string(mitFile(t, "alice-pkinit.crt")),
 			"pkinit_key": string(mitFile(t, "alice-pkinit.key")), "ca_cert": string(mitFile(t, "ca.pem"))}), nil)
 		kcClean(t, res)
 		kcWant(t, res, "DH: PKINIT accepted (TGT issued)", "pass")
 		kcWant(t, res, "DH: KDC certificate chain verifies", "pass")
+		kcWant(t, res, "DH: the KDC contributes to the session key", "info") // MIT sends PA_PKINIT_KX only for anonymous PKINIT
 		kcWant(t, res, "RSA: PKINIT accepted (TGT issued)", "pass")
 		// MIT signs the request's nonce in KDCDHKeyInfo, and encrypts the
 		// public-key reply with 3DES although AES was offered first.

@@ -39,6 +39,25 @@ type mockPKINIT struct {
 	token           []byte // freshness token handed out (RFC 8070)
 	echoPKAuthNonce bool   // put the PKAuthenticator nonce in the AS-REP, as Active Directory does
 	sawToken        []byte
+	anonKX          string // anonymous PKINIT: "" (conforming), "omit" or "wrong" PA_PKINIT_KX
+	anonRefuse      bool   // refuse anonymous PKINIT, as a KDC without WELLKNOWN/ANONYMOUS does
+}
+
+// unsignedContent returns the content of a SignedData without signers.
+func unsignedContent(ci []byte) ([]byte, bool) {
+	var outer cmsContentInfo
+	if _, err := asn1.Unmarshal(ci, &outer); err != nil {
+		return nil, false
+	}
+	var sd cmsSignedData
+	if _, err := asn1.Unmarshal(outer.Content.Bytes, &sd); err != nil || len(sd.SignerInfos) != 0 {
+		return nil, false
+	}
+	var content []byte
+	if _, err := asn1.Unmarshal(sd.EncapContentInfo.EContent.Bytes, &content); err != nil {
+		return nil, false
+	}
+	return content, true
 }
 
 func (k *mockKDC) pkinitAS(req messages.ASReq, raw []byte) []byte {
@@ -56,19 +75,34 @@ func (k *mockKDC) pkinitAS(req messages.ASReq, raw []byte) []byte {
 	if _, err := asn1.Unmarshal(pa.PADataValue, &v); err != nil {
 		return k.krbErr(tgs, errorcode.KDC_ERR_PREAUTH_FAILED, nil)
 	}
-	signed, err := cmsVerify(v.SignedAuthPack)
-	if err != nil {
-		return k.krbErr(tgs, 64, nil) // KDC_ERR_INVALID_SIG
-	}
-	inter := x509.NewCertPool()
-	for _, c := range signed.Certs[1:] {
-		inter.AddCert(c)
-	}
-	if _, err := signed.Signer.Verify(x509.VerifyOptions{Roots: pk.clientRoots, Intermediates: inter, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
-		return k.krbErr(tgs, 62, nil) // KDC_ERR_CLIENT_NOT_TRUSTED
+	anon := types.IsFlagSet(&req.ReqBody.KDCOptions, kdcOptRequestAnonymous)
+	var signed *cmsVerified
+	var content []byte
+	if anon {
+		if pk.anonRefuse {
+			return k.krbErr(tgs, errorcode.KDC_ERR_C_PRINCIPAL_UNKNOWN, nil)
+		}
+		c, ok := unsignedContent(v.SignedAuthPack)
+		if !ok || req.ReqBody.CName.NameType != ntWellknown || req.ReqBody.CName.PrincipalNameString() != "WELLKNOWN/ANONYMOUS" {
+			return k.krbErr(tgs, errorcode.KDC_ERR_PREAUTH_FAILED, nil)
+		}
+		content = c
+	} else {
+		var err error
+		if signed, err = cmsVerify(v.SignedAuthPack); err != nil {
+			return k.krbErr(tgs, 64, nil) // KDC_ERR_INVALID_SIG
+		}
+		inter := x509.NewCertPool()
+		for _, c := range signed.Certs[1:] {
+			inter.AddCert(c)
+		}
+		if _, err := signed.Signer.Verify(x509.VerifyOptions{Roots: pk.clientRoots, Intermediates: inter, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
+			return k.krbErr(tgs, 62, nil) // KDC_ERR_CLIENT_NOT_TRUSTED
+		}
+		content = signed.Content
 	}
 	var ap pkinitAuthPack
-	if _, err := asn1.Unmarshal(signed.Content, &ap); err != nil {
+	if _, err := asn1.Unmarshal(content, &ap); err != nil {
 		return k.krbErr(tgs, errorcode.KDC_ERR_PREAUTH_FAILED, nil)
 	}
 	body, _ := req.ReqBody.Marshal()
@@ -105,9 +139,30 @@ func (k *mockKDC) pkinitAS(req messages.ASReq, raw []byte) []byte {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	f := k.ticketFlags(true)
-	tkt, sess, err := messages.NewTicket(req.ReqBody.CName, k.realm, tgs, k.realm, f, k.kt, 18, 1, now, now, now.Add(10*time.Hour), now.Add(7*24*time.Hour))
+	crealm := k.realm
+	padata := []types.PAData{{PADataType: paPKASRep, PADataValue: paRep}}
+	if anon {
+		types.SetFlag(&f, tktFlagAnonymous)
+		crealm = "WELLKNOWN:ANONYMOUS"
+	}
+	tkt, sess, err := messages.NewTicket(req.ReqBody.CName, crealm, tgs, k.realm, f, k.kt, 18, 1, now, now, now.Add(10*time.Hour), now.Add(7*24*time.Hour))
 	if err != nil {
 		return nil
+	}
+	if anon { // RFC 8062 §7: the session key mixes in a key the KDC sends
+		kv := make([]byte, 32)
+		rand.Read(kv)
+		kx := types.EncryptionKey{KeyType: 18, KeyValue: kv}
+		sess, _ = krbCF2(kx, replyKey, "PKINIT", "KEYEXCHANGE")
+		if pk.anonKX == "wrong" {
+			rand.Read(kx.KeyValue)
+		}
+		kb, _ := forkasn1.Marshal(kx)
+		ed, _ := krbcrypto.GetEncryptedData(kb, replyKey, usagePKINITKX, 0)
+		eb, _ := ed.Marshal()
+		if pk.anonKX != "omit" {
+			padata = append(padata, types.PAData{PADataType: paPKINITKX, PADataValue: eb})
+		}
 	}
 	nonce := req.ReqBody.Nonce
 	if pk.echoPKAuthNonce {
@@ -117,8 +172,8 @@ func (k *mockKDC) pkinitAS(req messages.ASReq, raw []byte) []byte {
 		AuthTime: now, StartTime: now, EndTime: now.Add(10 * time.Hour), RenewTill: now.Add(7 * 24 * time.Hour), SRealm: k.realm, SName: tgs}
 	eb, _ := enc.Marshal()
 	ed, _ := krbcrypto.GetEncryptedData(eb, replyKey, keyusage.AS_REP_ENCPART, 0)
-	rep := messages.ASRep{KDCRepFields: messages.KDCRepFields{PVNO: 5, MsgType: 11, PAData: []types.PAData{{PADataType: paPKASRep, PADataValue: paRep}},
-		CRealm: k.realm, CName: req.ReqBody.CName, Ticket: tkt, EncPart: ed}}
+	rep := messages.ASRep{KDCRepFields: messages.KDCRepFields{PVNO: 5, MsgType: 11, PAData: padata,
+		CRealm: crealm, CName: req.ReqBody.CName, Ticket: tkt, EncPart: ed}}
 	rb, _ := rep.Marshal()
 	return rb
 }
@@ -243,6 +298,33 @@ func TestPKINIT(t *testing.T) {
 		defer func() { kdc.pk.clientRoots = roots }()
 		res := run(t, "krb.pkinit", args(M{"mode": "dh"}), nil)
 		if c := checkOf(res, "DH: PKINIT accepted"); c == nil || c.Status != "fail" || !strings.Contains(c.Detail, "KDC_ERR_CLIENT_NOT_TRUSTED") || !strings.Contains(c.Detail, "NTAuth") {
+			t.Errorf("refusal: %+v", c)
+		}
+	})
+
+	t.Run("anonymous PKINIT", func(t *testing.T) {
+		anon := M{"realm": "IDPDBG.TEST", "kdc": kdc.addr, "ca_cert": pki.caPEM, "anonymous": true}
+		res := run(t, "krb.pkinit", anon, nil)
+		noFailures(t, res)
+		for _, n := range []string{"PKINIT accepted", "KDC signature on its DH key", "KDC certificate chain verifies", "the ticket names the anonymous client",
+			"the ticket is flagged anonymous", "the KDC contributes to the session key", "session key = KRB-FX-CF2"} {
+			wantStatus(t, res, "anonymous PKINIT: "+n, "pass")
+		}
+		if a := res["anonymous"].(M); a["client"] != "WELLKNOWN/ANONYMOUS@WELLKNOWN:ANONYMOUS" || a["tgt"] == nil {
+			t.Errorf("anonymous: %v", a)
+		}
+		// Only the KDC is authenticated, so its certificate must verify.
+		delete(anon, "ca_cert")
+		wantStatus(t, run(t, "krb.pkinit", anon, nil), "anonymous PKINIT: KDC certificate chain verifies", "fail")
+		anon["ca_cert"] = pki.caPEM
+		for knob, check := range map[string]string{"omit": "the KDC contributes to the session key", "wrong": "session key = KRB-FX-CF2"} {
+			kdc.pk.anonKX = knob
+			wantStatus(t, run(t, "krb.pkinit", anon, nil), "anonymous PKINIT: "+check, "fail")
+		}
+		kdc.pk.anonKX = ""
+		kdc.pk.anonRefuse = true
+		defer func() { kdc.pk.anonRefuse = false }()
+		if c := checkOf(run(t, "krb.pkinit", anon, nil), "anonymous PKINIT: PKINIT accepted"); c == nil || c.Status != "fail" || !strings.Contains(c.Detail, "WELLKNOWN/ANONYMOUS principal") {
 			t.Errorf("refusal: %+v", c)
 		}
 	})

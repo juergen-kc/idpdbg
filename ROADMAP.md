@@ -16,7 +16,6 @@ item up.
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| FAST armored by anonymous PKINIT | The usual way to get FAST armor without a machine account; builds on the PKINIT support | M | MIT KDC in CI |
 | IdP-initiated SAML logout | Receive and answer the IdP's LogoutRequest; logout is a frequent source of bugs | S–M | Keycloak in CI |
 | Software authenticator: packed attestation with a certificate chain, and fido-u2f | Tests whether a relying party really verifies attestation, including a negative test with a broken chain | M | Test relying party in the unit tests |
 | Internal addresses for metadata URLs | Keep URLs from a provider's metadata (such as `jwks_uri`) off loopback, private and link-local addresses unless the issuer is on one or `--allow-private-urls` is given, as certificate URLs already are | S–M | Unit tests; the CI servers on localhost |

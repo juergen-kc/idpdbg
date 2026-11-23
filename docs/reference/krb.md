@@ -88,7 +88,7 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## krb fast
 
-Get a TGT inside Kerberos FAST armoring (RFC 6113): checks the KDC advertises FAST, armors the AS exchange with a TGT (a machine account's, or the client's own), authenticates with the encrypted challenge factor and verifies the armored replies: integrity-protected errors, the KDC's own challenge, the strengthened reply key and the ticket checksum. With target_spn it also gets a service ticket with FAST and implicit armor. Returns ticket descriptions only, never usable tickets or keys.
+Get a TGT inside Kerberos FAST armoring (RFC 6113): checks the KDC advertises FAST, armors the AS exchange with a TGT (a machine account's, one from anonymous PKINIT, or the client's own), authenticates with the encrypted challenge factor and verifies the armored replies: integrity-protected errors, the KDC's own challenge, the strengthened reply key and the ticket checksum. With target_spn it also gets a service ticket with FAST and implicit armor. Returns ticket descriptions only, never usable tickets or keys.
 
 MCP tool: `krb_fast`.
 
@@ -104,13 +104,14 @@ MCP tool: `krb_fast`.
 | `--armor-principal` | string | Principal whose TGT armors the request, usually a machine account (host/client.example.com, or CLIENT$ on Active Directory); default: the client itself. |
 | `--armor-keytab` | string | Keytab of armor_principal (a path, or base64). May be a file path (CLI or profile only). |
 | `--armor-password` | string | Password of armor_principal. Secret: falls back to `IDPDBG_ARMOR_PASSWORD`, redacted in traces. |
+| `--armor-anonymous` | bool | Armor with a TGT from anonymous PKINIT (RFC 8062) instead: no machine account needed, and the KDC is authenticated by its certificate (pass its CA as ca_cert). |
 | `--target-spn` | string | Also get a service ticket for this SPN inside FAST, e.g. HTTP/web.example.com. |
 
 Plus the [common parameters](README.md#common-parameters).
 
 ## krb pkinit
 
-Get a TGT with a certificate (PKINIT, RFC 4556): sign the AuthPack with the certificate's key and check the KDC's answer in Diffie-Hellman mode and in public-key encryption (RSA) mode: the KDC's signature, its certificate's chain, purpose and name, the nonce, the reply key binding (asChecksum) and the decrypted AS-REP. Also asks for a freshness token (RFC 8070) first and explains KDC refusals, including Active Directory's certificate mapping rules.
+Get a TGT with a certificate (PKINIT, RFC 4556): sign the AuthPack with the certificate's key and check the KDC's answer in Diffie-Hellman mode and in public-key encryption (RSA) mode: the KDC's signature, its certificate's chain, purpose and name, the nonce, the reply key binding (asChecksum) and the decrypted AS-REP. Also asks for a freshness token (RFC 8070) first and explains KDC refusals, including Active Directory's certificate mapping rules. With anonymous, runs anonymous PKINIT (RFC 8062) instead and checks the anonymous ticket and the KDC's key exchange (PA_PKINIT_KX).
 
 MCP tool: `krb_pkinit`.
 
@@ -129,6 +130,7 @@ MCP tool: `krb_pkinit`.
 | `--mode` | string | Reply key delivery to try: Diffie-Hellman, public-key encryption (RSA keys only), or both. Default `both`. One of `both`, `dh`, `rsa`. |
 | `--dh-group` | int | MODP group for Diffie-Hellman: 14 (2048-bit) or 2 (1024-bit). Default `14`. |
 | `--freshness` | bool | Ask the KDC for a freshness token first (RFC 8070) and sign it into the AuthPack. Default `true`. |
+| `--anonymous` | bool | Anonymous PKINIT (RFC 8062): get a TGT for WELLKNOWN/ANONYMOUS with no client certificate, only authenticating the KDC (Diffie-Hellman). Needs the realm, not a principal. |
 
 Plus the [common parameters](README.md#common-parameters).
 

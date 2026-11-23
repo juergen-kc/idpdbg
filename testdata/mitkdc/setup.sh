@@ -89,6 +89,8 @@ k "addprinc +requires_preauth -randkey HTTP/web.mit.test"
 k "addprinc +requires_preauth -e aes256-cts-hmac-sha384-192:normal -randkey HTTP/sha2.mit.test"
 # svc-web may use protocol transition (S4U2Self).
 k "addprinc +requires_preauth +ok_to_auth_as_delegate -randkey svc-web"
+# Anonymous PKINIT (RFC 8062), e.g. to armor FAST without a machine account.
+k "addprinc -randkey WELLKNOWN/ANONYMOUS"
 k "ktadd -k $OUT/alice.keytab -norandkey alice"
 k "ktadd -k $OUT/web.keytab HTTP/web.mit.test"
 k "ktadd -k $OUT/sha2.keytab -e aes256-cts-hmac-sha384-192:normal HTTP/sha2.mit.test"

@@ -396,6 +396,23 @@ func armorTicket(c *Ctx, s *krbSetup, cs *Checks, out M) (*fastTunnel, error) {
 	cl, err := s.client(c)
 	who := principalString(s.cname, s.realm)
 	note := "armored with the client's own TGT from an ordinary AS exchange: this exercises the KDC's FAST handling, but in real use the armor comes from a machine account or anonymous PKINIT, which is what keeps the password exchange from being attacked offline"
+	if c.Bool("armor_anonymous") {
+		if c.Str("armor_principal") != "" {
+			return nil, errors.New("pass armor_principal or armor_anonymous, not both")
+		}
+		info, t := pkinitExchange(c, s, nil, "dh", nil, cs)
+		out["armor_pkinit"] = info
+		if t == nil {
+			return nil, nil
+		}
+		cs.add("armor TGT issued", "pass", "anonymous PKINIT: "+principalString(t.rep.CName, t.rep.CRealm), "RFC 6113 §5.4.1.1")
+		for _, ck := range *cs {
+			if strings.HasPrefix(ck.Name, "anonymous PKINIT: KDC certificate chain verifies") && ck.Status == "fail" {
+				cs.add("armor authenticates the KDC", "warn", "the KDC's certificate did not verify, so this armor does not keep an attacker posing as the KDC from attacking the password exchange (pass the KDC's CA as ca_cert)", "RFC 8062 §4.1")
+			}
+		}
+		return armorFromTGT(t.rep.CName, t.rep.CRealm, t.rep.Ticket, t.rep.DecryptedEncPart.Key, out, "WELLKNOWN/ANONYMOUS (anonymous PKINIT)")
+	}
 	if ap := c.Str("armor_principal"); ap != "" {
 		name, realm := ap, s.realm
 		if i := strings.LastIndex(ap, "@"); i > 0 {
@@ -431,12 +448,17 @@ func armorTicket(c *Ctx, s *krbSetup, cs *Checks, out M) (*fastTunnel, error) {
 	if note != "" {
 		cs.add("armor source", "info", note, "RFC 6113 §5.4.1.1")
 	}
-	tgt, sk := rep.Ticket, rep.DecryptedEncPart.Key
+	return armorFromTGT(cl.Credentials.CName(), s.realm, rep.Ticket, rep.DecryptedEncPart.Key, out, who)
+}
+
+// armorFromTGT builds the FAST armor (an AP-REQ with a fresh subkey) and
+// the armor key from a TGT and its session key.
+func armorFromTGT(cname types.PrincipalName, crealm string, tgt messages.Ticket, sk types.EncryptionKey, out M, who string) (*fastTunnel, error) {
 	klen, err := krbKeyLen(sk.KeyType)
 	if err != nil {
 		return nil, err
 	}
-	auth, err := types.NewAuthenticator(s.realm, cl.Credentials.CName())
+	auth, err := types.NewAuthenticator(crealm, cname)
 	if err != nil {
 		return nil, err
 	}
@@ -848,13 +870,14 @@ func fastTGS(c *Ctx, s *krbSetup, tgt messages.Ticket, sk types.EncryptionKey, s
 func init() {
 	register(&Op{
 		Name: "krb.fast",
-		Summary: "Get a TGT inside Kerberos FAST armoring (RFC 6113): checks the KDC advertises FAST, armors the AS exchange with a TGT (a machine account's, or the client's own), " +
+		Summary: "Get a TGT inside Kerberos FAST armoring (RFC 6113): checks the KDC advertises FAST, armors the AS exchange with a TGT (a machine account's, one from anonymous PKINIT, or the client's own), " +
 			"authenticates with the encrypted challenge factor and verifies the armored replies: integrity-protected errors, the KDC's own challenge, the strengthened reply key and the ticket checksum. " +
 			"With target_spn it also gets a service ticket with FAST and implicit armor. Returns ticket descriptions only, never usable tickets or keys.",
 		Params: joinParams(krbParams, []Param{
 			{Name: "armor_principal", Type: "string", Desc: "Principal whose TGT armors the request, usually a machine account (host/client.example.com, or CLIENT$ on Active Directory); default: the client itself"},
 			{Name: "armor_keytab", Type: "string", Path: true, Desc: "Keytab of armor_principal (a path, or base64)"},
 			{Name: "armor_password", Type: "string", Secret: true, Desc: "Password of armor_principal"},
+			{Name: "armor_anonymous", Type: "bool", Desc: "Armor with a TGT from anonymous PKINIT (RFC 8062) instead: no machine account needed, and the KDC is authenticated by its certificate (pass its CA as ca_cert)"},
 			{Name: "target_spn", Type: "string", Desc: "Also get a service ticket for this SPN inside FAST, e.g. HTTP/web.example.com"},
 		}),
 		Run: runFAST,

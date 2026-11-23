@@ -179,6 +179,23 @@ func cmsSign(eContentType asn1.ObjectIdentifier, content []byte, chain []*x509.C
 	return asn1.Marshal(cmsContentInfo{ContentType: oidCMSSignedData, Content: asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: sdDER}})
 }
 
+// cmsUnsigned wraps content in a SignedData without signers, as anonymous
+// PKINIT sends its AuthPack (RFC 8062 §4.1).
+func cmsUnsigned(eContentType asn1.ObjectIdentifier, content []byte) ([]byte, error) {
+	sd := cmsSignedData{
+		Version:          3,
+		DigestAlgorithms: []pkix.AlgorithmIdentifier{},
+		EncapContentInfo: cmsEncapContentInfo{EContentType: eContentType,
+			EContent: asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: mustDER(content)}},
+		SignerInfos: []cmsSignerInfo{},
+	}
+	sdDER, err := asn1.Marshal(sd)
+	if err != nil {
+		return nil, err
+	}
+	return asn1.Marshal(cmsContentInfo{ContentType: oidCMSSignedData, Content: asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: sdDER}})
+}
+
 // cmsVerified is a SignedData whose signature checked out against the
 // certificate it names. The chain is not judged here.
 type cmsVerified struct {

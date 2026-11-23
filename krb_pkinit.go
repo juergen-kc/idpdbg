@@ -36,8 +36,31 @@ const (
 	paPKASReq          int32 = 16
 	paPKASRep          int32 = 17
 	paASFreshness      int32 = 150 // RFC 8070
+	paPKINITKX         int32 = 147 // RFC 8062 §7
 	usagePKInitASReqCk       = 6   // RFC 4556 §3.2.3.2: asChecksum
+	usagePKINITKX            = 44  // RFC 8062 §7
+	// RFC 6112 §5: the request-anonymous KDC option and the anonymous
+	// ticket flag are both bit 16 (gokrb5's flags.RequestAnonymous is an
+	// older draft's 12).
+	kdcOptRequestAnonymous = 16
+	tktFlagAnonymous       = 16
+	ntWellknown            = 11 // RFC 6111 §3
 )
+
+// anonymousSetup is s with the anonymous client of RFC 8062:
+// WELLKNOWN/ANONYMOUS in the realm whose KDC it talks to.
+func anonymousSetup(s *krbSetup) *krbSetup {
+	a := *s
+	a.user, a.kt = "WELLKNOWN/ANONYMOUS", nil
+	a.cname = types.PrincipalName{NameType: ntWellknown, NameString: []string{"WELLKNOWN", "ANONYMOUS"}}
+	return &a
+}
+
+// pkinitTGT is what a PKINIT exchange yields beyond its report: the
+// decrypted AS-REP, for armoring FAST with it.
+type pkinitTGT struct {
+	rep messages.ASRep
+}
 
 var (
 	oidPKINITAuthData     = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 2, 3, 1}
@@ -378,16 +401,27 @@ func pkinitFreshness(c *Ctx, s *krbSetup, cs *Checks, out M) []byte {
 }
 
 // pkinitExchange runs one AS exchange in the given mode ("dh" or "rsa").
-func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []byte, cs *Checks) M {
+// pkinitExchange runs one PKINIT AS exchange. Without a client (cl nil)
+// it is anonymous PKINIT (RFC 8062): an unsigned AuthPack from
+// WELLKNOWN/ANONYMOUS, Diffie-Hellman only, and the KDC's key exchange
+// (PA_PKINIT_KX) checked against the session key.
+func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []byte, cs *Checks) (M, *pkinitTGT) {
+	anon := cl == nil
 	label := map[string]string{"dh": "DH", "rsa": "RSA"}[mode]
+	if anon {
+		label, mode, s = "anonymous PKINIT", "dh", anonymousSetup(s)
+	}
 	out := M{}
-	fail := func(check string, err error, ref string) M {
+	fail := func(check string, err error, ref string) (M, *pkinitTGT) {
 		cs.add(label+": "+check, "fail", err.Error(), ref)
-		return out
+		return out, nil
 	}
 	req, err := messages.NewASReqForTGT(s.realm, s.cfg, s.cname)
 	if err != nil {
 		return fail("AS-REQ", err, "RFC 4120 §5.4.1")
+	}
+	if anon {
+		types.SetFlag(&req.ReqBody.KDCOptions, kdcOptRequestAnonymous)
 	}
 	body, err := req.ReqBody.Marshal()
 	if err != nil {
@@ -408,6 +442,9 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 	var p, x *big.Int
 	if mode == "dh" {
 		group := c.Int("dh_group")
+		if group == 0 { // operations without the parameter, such as krb.fast
+			group = 14
+		}
 		if p, err = modpPrime(group); err != nil {
 			return fail("Diffie-Hellman group", err, "RFC 4556 §3.2.3.1")
 		}
@@ -430,7 +467,12 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 	if err != nil {
 		return fail("AuthPack", err, "RFC 4556 §3.2.1")
 	}
-	signed, err := cmsSign(oidPKINITAuthData, apDER, cl.chain, cl.signer)
+	var signed []byte
+	if anon {
+		signed, err = cmsUnsigned(oidPKINITAuthData, apDER)
+	} else {
+		signed, err = cmsSign(oidPKINITAuthData, apDER, cl.chain, cl.signer)
+	}
 	if err != nil {
 		return fail("signed AuthPack", err, "RFC 4556 §3.2.1")
 	}
@@ -460,8 +502,11 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 			// encryption types offered, while Diffie-Hellman works.
 			hint = "Active Directory (Windows Server 2022) answers public-key encryption mode this way whatever encryption types are offered; Diffie-Hellman (mode dh), which Windows clients use, works"
 		}
+		if anon {
+			hint = "(the KDC may not allow anonymous PKINIT: MIT krb5 needs a WELLKNOWN/ANONYMOUS principal and pkinit settings on the KDC; Active Directory does not support it)"
+		}
 		cs.add(label+": PKINIT accepted (TGT issued)", "fail", strings.TrimSpace(pkinitErrorName(ke.ErrorCode)+" "+hint), "RFC 4556 §3.2.2")
-		return out
+		return out, nil
 	}
 	var rep messages.ASRep
 	if err := rep.Unmarshal(reply); err != nil {
@@ -495,7 +540,7 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 		}
 		v, err := cmsVerify(dh.DHSignedData)
 		if !cs.ok(err == nil, label+": KDC signature on its DH key", detailOr(err, ""), "RFC 4556 §3.2.3.1") {
-			return out
+			return out, nil
 		}
 		kdcSigned = v
 		cs.ok(v.EContentType.Equal(oidPKINITDHKeyData), label+": signed content is KDCDHKeyInfo", v.EContentType.String(), "RFC 4556 §3.2.3.1")
@@ -521,7 +566,7 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 		}
 		pm1 := new(big.Int).Sub(p, big.NewInt(1))
 		if !cs.ok(ky.Cmp(big.NewInt(1)) > 0 && ky.Cmp(pm1) < 0, label+": KDC DH public value in range", "", "RFC 4556 §3.2.3.1") {
-			return out
+			return out, nil
 		}
 		z := new(big.Int).Exp(ky, x, p).FillBytes(make([]byte, (p.BitLen()+7)/8))
 		n, err := krbKeyLen(etype)
@@ -537,6 +582,9 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 		}
 	case choice.Tag == 1: // encKeyPack
 		out["reply"] = "public-key encryption"
+		if anon {
+			return fail("reply mode", errors.New("the KDC encrypted the reply key, which anonymous PKINIT has no certificate for"), "RFC 8062 §4.1")
+		}
 		if mode != "rsa" {
 			cs.add(label+": reply mode", "warn", "the KDC ignored the Diffie-Hellman value and encrypted the reply key to the certificate instead", "RFC 4556 §3.2.3")
 		}
@@ -550,7 +598,7 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 		}
 		opened, err := cmsDecrypt(enc, cl.chain[0], dec)
 		if !cs.ok(err == nil, label+": reply key envelope decrypts", detailOr(err, ""), "RFC 4556 §3.2.3.2") {
-			return out
+			return out, nil
 		}
 		out["key_transport"], out["content_encryption"] = opened.KeyAlg, opened.ContentAlg
 		if opened.ContentAlg == "3DES-CBC" {
@@ -562,7 +610,7 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 			v, err = cmsVerify(mustDER(cmsContentInfo{ContentType: oidCMSSignedData, Content: asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: opened.Content}}))
 		}
 		if !cs.ok(err == nil, label+": KDC signature on the reply key", detailOr(err, ""), "RFC 4556 §3.2.3.2") {
-			return out
+			return out, nil
 		}
 		kdcSigned = v
 		cs.ok(v.EContentType.Equal(oidPKINITRKeyData), label+": signed content is ReplyKeyPack", v.EContentType.String(), "RFC 4556 §3.2.3.2")
@@ -587,7 +635,7 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 		err = rep.DecryptedEncPart.Unmarshal(b)
 	}
 	if !cs.ok(err == nil, label+": AS-REP decrypts with the reply key", detailOr(err, etypeName(replyKey.KeyType)), "RFC 4556 §3.2.3") {
-		return out
+		return out, nil
 	}
 	// The PKAuthenticator nonce need not equal the request's (RFC 4556
 	// §3.2.1), and this client keeps them apart to see which one comes back.
@@ -599,12 +647,63 @@ func pkinitExchange(c *Ctx, s *krbSetup, cl *pkinitClient, mode string, token []
 	default:
 		cs.add(label+": AS-REP nonce matches the request", "fail", fmt.Sprintf("sent %d, got %d", req.ReqBody.Nonce, got), "RFC 4120 §5.4.2")
 	}
+	if anon && !anonymousChecks(cs, label, rep, out) {
+		return out, nil
+	}
+	if out["reply"] == "Diffie-Hellman" && !kdcContributionCheck(cs, label, rep, replyKey, anon) {
+		return out, nil
+	}
 	tgt := describeTicket(rep.Ticket)
 	tgt["flags"] = flagList(rep.DecryptedEncPart.Flags)
 	tgt["session_key_type"] = etypeName(rep.DecryptedEncPart.Key.KeyType)
 	tgt["end_time"] = krbTime(rep.DecryptedEncPart.EndTime)
 	out["tgt"] = tgt
-	return out
+	return out, &pkinitTGT{rep: rep}
+}
+
+// anonymousChecks checks the anonymous client name and ticket flag of an
+// anonymous AS-REP.
+func anonymousChecks(cs *Checks, label string, rep messages.ASRep, out M) bool {
+	out["client"] = principalString(rep.CName, rep.CRealm)
+	named := cs.ok(len(rep.CName.NameString) == 2 && rep.CName.NameString[0] == "WELLKNOWN" && rep.CName.NameString[1] == "ANONYMOUS",
+		label+": the ticket names the anonymous client", principalString(rep.CName, rep.CRealm), "RFC 8062 §3")
+	flagged := cs.ok(types.IsFlagSet(&rep.DecryptedEncPart.Flags, tktFlagAnonymous), label+": the ticket is flagged anonymous", "", "RFC 8062 §3")
+	return named && flagged
+}
+
+// kdcContributionCheck checks PA_PKINIT_KX: the KDC's contribution to the
+// session key, so that a client that chose the Diffie-Hellman exchange
+// alone cannot set the ticket's session key. It must be there for
+// anonymous PKINIT and should be for Diffie-Hellman generally.
+func kdcContributionCheck(cs *Checks, label string, rep messages.ASRep, replyKey types.EncryptionKey, required bool) bool {
+	pa, ok := findPA(rep.PAData, paPKINITKX)
+	if !ok {
+		if required {
+			cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "fail", "absent: an anonymous AS-REP must carry it", "RFC 8062 §7")
+			return false
+		}
+		cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "info", "absent: RFC 8062 says a KDC should send it with Diffie-Hellman too (MIT krb5 sends it only for anonymous PKINIT)", "RFC 8062 §7")
+		return true
+	}
+	cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "pass", "", "RFC 8062 §7")
+	var ed types.EncryptedData
+	if err := ed.Unmarshal(pa.PADataValue); err != nil {
+		cs.add(label+": PA_PKINIT_KX", "fail", err.Error(), "RFC 8062 §7")
+		return false
+	}
+	b, err := krbcrypto.DecryptEncPart(ed, replyKey, usagePKINITKX)
+	var kx types.EncryptionKey
+	if err == nil {
+		_, err = forkasn1.Unmarshal(b, &kx)
+	}
+	if err != nil {
+		cs.add(label+": PA_PKINIT_KX", "fail", err.Error(), "RFC 8062 §7")
+		return false
+	}
+	want, err := krbCF2(kx, replyKey, "PKINIT", "KEYEXCHANGE")
+	sk := rep.DecryptedEncPart.Key
+	return cs.ok(err == nil && want.KeyType == sk.KeyType && bytes.Equal(want.KeyValue, sk.KeyValue),
+		label+": session key = KRB-FX-CF2(KDC contribution, reply key, \"PKINIT\", \"KEYEXCHANGE\")", detailOr(err, ""), "RFC 8062 §7")
 }
 
 // pkinitKDCChecks judges the certificate the KDC signed with: chain, purpose
@@ -668,6 +767,16 @@ func runPKINIT(c *Ctx) (M, error) {
 	if err != nil {
 		return nil, err
 	}
+	if c.Bool("anonymous") {
+		var cs Checks
+		out := M{"realm": s.realm, "kdcs": s.kdcs}
+		if s.found != nil {
+			out["kdc_discovery"] = s.found
+		}
+		out["anonymous"], _ = pkinitExchange(c, s, nil, "dh", nil, &cs)
+		out["checks"] = cs
+		return out, nil
+	}
 	cl, err := loadPKINITClient(c)
 	if err != nil {
 		return nil, err
@@ -701,7 +810,7 @@ func runPKINIT(c *Ctx) (M, error) {
 				continue
 			}
 		}
-		out[map[string]string{"dh": "diffie_hellman", "rsa": "public_key_encryption"}[m]] = pkinitExchange(c, s, cl, m, token, &cs)
+		out[map[string]string{"dh": "diffie_hellman", "rsa": "public_key_encryption"}[m]], _ = pkinitExchange(c, s, cl, m, token, &cs)
 	}
 	return out, nil
 }
@@ -715,7 +824,7 @@ func init() {
 	}
 	register(&Op{
 		Name:    "krb.pkinit",
-		Summary: "Get a TGT with a certificate (PKINIT, RFC 4556): sign the AuthPack with the certificate's key and check the KDC's answer in Diffie-Hellman mode and in public-key encryption (RSA) mode: the KDC's signature, its certificate's chain, purpose and name, the nonce, the reply key binding (asChecksum) and the decrypted AS-REP. Also asks for a freshness token (RFC 8070) first and explains KDC refusals, including Active Directory's certificate mapping rules.",
+		Summary: "Get a TGT with a certificate (PKINIT, RFC 4556): sign the AuthPack with the certificate's key and check the KDC's answer in Diffie-Hellman mode and in public-key encryption (RSA) mode: the KDC's signature, its certificate's chain, purpose and name, the nonce, the reply key binding (asChecksum) and the decrypted AS-REP. Also asks for a freshness token (RFC 8070) first and explains KDC refusals, including Active Directory's certificate mapping rules. With anonymous, runs anonymous PKINIT (RFC 8062) instead and checks the anonymous ticket and the KDC's key exchange (PA_PKINIT_KX).",
 		Params: joinParams(base, []Param{
 			{Name: "pkinit_cert", Type: "string", Path: true, Desc: "Client certificate (PEM), followed by any intermediates; with pkinit_piv_slot, only intermediates the card does not hold"},
 			{Name: "pkinit_key", Type: "string", Path: true, Desc: "The certificate's private key (PEM; RSA or ECDSA)"},
@@ -725,6 +834,7 @@ func init() {
 			{Name: "mode", Type: "string", Default: "both", Enum: []string{"both", "dh", "rsa"}, Desc: "Reply key delivery to try: Diffie-Hellman, public-key encryption (RSA keys only), or both"},
 			{Name: "dh_group", Type: "int", Default: 14, Desc: "MODP group for Diffie-Hellman: 14 (2048-bit) or 2 (1024-bit)"},
 			{Name: "freshness", Type: "bool", Default: true, Desc: "Ask the KDC for a freshness token first (RFC 8070) and sign it into the AuthPack"},
+			{Name: "anonymous", Type: "bool", Desc: "Anonymous PKINIT (RFC 8062): get a TGT for WELLKNOWN/ANONYMOUS with no client certificate, only authenticating the KDC (Diffie-Hellman). Needs the realm, not a principal"},
 		}),
 		Run: runPKINIT,
 	})

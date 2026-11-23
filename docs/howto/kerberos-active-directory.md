@@ -113,6 +113,17 @@ Kerberos armoring" enabled. Active Directory accepts armor at "Supported" but
 only advertises FAST at "Always provide claims"; idpdbg reports that as
 `info`, not as a failure.
 
+Active Directory has no anonymous PKINIT. Against an MIT krb5 KDC with a
+`WELLKNOWN/ANONYMOUS` principal, the armor can come from anonymous PKINIT
+(RFC 8062) instead of an account; the KDC's CA authenticates the KDC:
+
+```bash
+idpdbg krb fast --principal alice@MIT.TEST --keytab alice.keytab --armor-anonymous --ca-cert kdc-ca.pem
+```
+
+`idpdbg krb pkinit --realm MIT.TEST --anonymous --ca-cert kdc-ca.pem` runs
+anonymous PKINIT on its own.
+
 ## PKINIT with a certificate
 
 The user needs a certificate with the Client Authentication or Smart Card
