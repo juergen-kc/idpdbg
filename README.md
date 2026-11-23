@@ -127,6 +127,7 @@ What each group covers:
 | [`jwt`](docs/reference/jwt.md), [`jwks`](docs/reference/jwks.md) | Decode, verify (RS/PS/ES/EdDSA/HS; keys from the issuer, a JWKS, PEM or a secret) and sign JWTs; fetch a JWKS |
 | [`jwe`](docs/reference/jwe.md) | Decrypt and encrypt: RSA-OAEP, RSA1_5, ECDH-ES, AES and AES-GCM key wrap, PBES2, dir |
 | [`sdjwt`](docs/reference/sdjwt.md) | SD-JWT and SD-JWT VC: disclosures, reconstructed claims, issuer signature, key binding |
+| [`mdoc`](docs/reference/mdoc.md) | mdoc (ISO/IEC 18013-5, mDL and EUDI PID): issuer signature, document signer chain, MSO validity and element digests |
 | [`saml`](docs/reference/saml.md) | IdP and SP metadata, AuthnRequests, login with a local ACS (POST or Artifact), response decoding with signature checks and decryption, Single Logout |
 | [`wsfed`](docs/reference/wsfed.md), [`wstrust`](docs/reference/wstrust.md) | WS-Federation passive sign-in and wresult decoding; WS-Trust issue (AD FS usernamemixed) and validate |
 | [`scim`](docs/reference/scim.md) | Discovery, single requests, user and group lifecycle scenarios, bulk |

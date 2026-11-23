@@ -11,6 +11,7 @@ Every operation runs as `idpdbg <group> <operation> [--param value ...]` and as 
 | [jwks](jwks.md) — JSON Web Key Sets | [`fetch`](jwks.md#jwks-fetch) |
 | [jwe](jwe.md) — JSON Web Encryption | [`decrypt`](jwe.md#jwe-decrypt), [`encrypt`](jwe.md#jwe-encrypt) |
 | [sdjwt](sdjwt.md) — Selective Disclosure JWTs | [`decode`](sdjwt.md#sdjwt-decode) |
+| [mdoc](mdoc.md) — mdoc credentials (ISO/IEC 18013-5) | [`decode`](mdoc.md#mdoc-decode) |
 | [saml](saml.md) — SAML 2.0 | [`metadata`](saml.md#saml-metadata), [`authn_request`](saml.md#saml-authn_request), [`login`](saml.md#saml-login), [`decode`](saml.md#saml-decode), [`sp_metadata`](saml.md#saml-sp_metadata), [`logout`](saml.md#saml-logout), [`resolve_artifact`](saml.md#saml-resolve_artifact), [`idp_logout`](saml.md#saml-idp_logout) |
 | [wsfed](wsfed.md) — WS-Federation | [`metadata`](wsfed.md#wsfed-metadata), [`login`](wsfed.md#wsfed-login), [`decode`](wsfed.md#wsfed-decode), [`signout_url`](wsfed.md#wsfed-signout_url) |
 | [wstrust](wstrust.md) — WS-Trust | [`issue`](wstrust.md#wstrust-issue), [`validate`](wstrust.md#wstrust-validate) |

@@ -24,7 +24,7 @@ server-supplied URLs held to public addresses. The
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| mdoc (ISO/IEC 18013-5) credentials | Decoding and issuer-signature checks first, presentation later | L | Published sample documents, then a container |
+| mdoc presentation | Verify mdoc device authentication against the session transcript, and present mso_mdoc credentials over OID4VP; decoding and issuer checks are done | M | ISO sample transcript in the unit tests, then a verifier container |
 | CTAP 2.1 credential management | List the passkeys on a security key; deleting only with explicit confirmation | M | Emulated key in the unit tests; real keys by hand |
 | SPIRE Server API | The server's administration API, next to the Workload API | L | SPIRE server container in CI |
 | FIDO over NFC | Security keys through an NFC reader, over the existing PC/SC support | S–M | Real keys by hand (needs a reader) |

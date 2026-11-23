@@ -20,6 +20,7 @@ var groups = []struct {
 	{"jwks", "JSON Web Key Sets", nil},
 	{"jwe", "JSON Web Encryption", nil},
 	{"sdjwt", "Selective Disclosure JWTs", nil},
+	{"mdoc", "mdoc credentials (ISO/IEC 18013-5)", nil},
 	{"saml", "SAML 2.0", nil},
 	{"wsfed", "WS-Federation", nil},
 	{"wstrust", "WS-Trust", nil},

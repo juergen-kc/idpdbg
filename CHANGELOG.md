@@ -25,6 +25,17 @@ as the release notes, and refuses a tag without one.
   the browser, checks state, iss and that the token response names the
   credential, then requests and checks the credential as before.
   Tested against Keycloak's OID4VCI issuer in CI.
+- `mdoc decode`: mdoc credentials (ISO/IEC 18013-5: the mDL, the EUDI PID
+  in mso_mdoc format) as IssuerSigned, a Document or a DeviceResponse.
+  Checks the issuer's COSE_Sign1 signature with the document signer
+  certificate, its purpose and its chain to an IACA (`--trust-anchors`),
+  the Mobile Security Object (version, docType, digest algorithm,
+  validity, device key) and every data element against its digest, and
+  shows the elements by namespace. `--at` judges validity at another time.
+  Device authentication is decoded, not verified yet. Tested with the
+  ISO/IEC 18013-5 Annex D sample.
+- `vci issue` checks mso_mdoc credentials the same way, and that the MSO's
+  device key is the holder key.
 
 ## [0.26.1] - 2026-11-23
 

@@ -341,6 +341,10 @@ func runVCIIssue(c *Ctx) (M, error) {
 	out["credentials"] = creds
 	holderThumb := jwkThumbprint(jwk)
 	for i, cred := range creds {
+		if str(conf["format"]) == "mso_mdoc" {
+			vciCheckMdoc(c, &cs, out, i, cred, conf, holderThumb)
+			continue
+		}
 		if !strings.Contains(cred, "~") {
 			cs.add(fmt.Sprintf("credential %d", i+1), "info", "format "+str(conf["format"])+" is shown but not analysed", vciRef)
 			continue
@@ -372,6 +376,28 @@ func runVCIIssue(c *Ctx) (M, error) {
 		cs.add("holder key", "info", "a new P-256 key was generated; holder_key in this result is needed to present the credential (vp present)", vciRef)
 	}
 	return out, nil
+}
+
+// vciCheckMdoc checks an mso_mdoc credential (base64url IssuerSigned,
+// OID4VCI Appendix A.2) and that its device key is the holder key.
+func vciCheckMdoc(c *Ctx, cs *Checks, out M, i int, cred string, conf M, holderThumb string) {
+	a, err := runMdocDecode(c.sub(M{"credential": cred, "doc_type": str(conf["doctype"]), "leeway": 60, "timeout": c.Int("timeout")}))
+	if err != nil {
+		cs.add(fmt.Sprintf("credential %d decodes", i+1), "fail", err.Error(), mdocRef)
+		return
+	}
+	for _, ck := range a["checks"].(Checks) {
+		ck.Name = fmt.Sprintf("credential %d: %s", i+1, ck.Name)
+		*cs = append(*cs, ck)
+	}
+	docs, _ := a["documents"].([]M)
+	if len(docs) == 0 {
+		return
+	}
+	mso, _ := docs[0]["mso"].(M)
+	dk, _ := mso["device_key"].(M)
+	cs.ok(dk != nil && jwkThumbprint(map[string]any(dk)) == holderThumb, fmt.Sprintf("credential %d: bound to the holder key (MSO device key)", i+1), "", vciRef+" Appendix A.2")
+	out[fmt.Sprintf("credential_%d", i+1)] = M{"doc_type": docs[0]["doc_type"], "namespaces": docs[0]["namespaces"]}
 }
 
 // vciPreAuthorizedToken redeems a pre-authorized code (OID4VCI §6.1).

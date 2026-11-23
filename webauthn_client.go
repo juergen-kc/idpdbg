@@ -65,6 +65,8 @@ func cborEncode(v any) []byte {
 			out = append(out, cborEncode(x)...)
 		}
 		return out
+	case cborTag:
+		return append(head(6, t.Num), cborEncode(t.V)...)
 	case string:
 		return append(head(3, uint64(len(t))), t...)
 	case []byte:

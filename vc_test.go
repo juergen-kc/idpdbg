@@ -29,10 +29,11 @@ type mockIssuer struct {
 	// challenge, redirect URI and how the credential was asked for.
 	codes       map[string]M
 	issuerState string // the issuer_state the last authorization request carried
+	mdoc        *testMdoc
 }
 
 func newMockIssuer(t *testing.T) *mockIssuer {
-	is := &mockIssuer{codes: map[string]M{}}
+	is := &mockIssuer{codes: map[string]M{}, mdoc: newTestMdocIssuer(t)}
 	is.key, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	mux := http.NewServeMux()
 	is.Server = httptest.NewServer(mux)
@@ -45,7 +46,9 @@ func newMockIssuer(t *testing.T) *mockIssuer {
 	mux.HandleFunc("/.well-known/openid-credential-issuer", func(w http.ResponseWriter, _ *http.Request) {
 		out(w, 200, M{"credential_issuer": is.URL, "credential_endpoint": is.URL + "/credential", "nonce_endpoint": is.URL + "/nonce",
 			"credential_configurations_supported": M{"pid": M{"format": "dc+sd-jwt", "vct": "urn:eudi:pid:1", "scope": "pid_scope", "cryptographic_binding_methods_supported": []string{"jwk"},
-				"proof_types_supported": M{"jwt": M{"proof_signing_alg_values_supported": []string{"ES256"}}}}}})
+				"proof_types_supported": M{"jwt": M{"proof_signing_alg_values_supported": []string{"ES256"}}}},
+				"mdl": M{"format": "mso_mdoc", "doctype": "org.iso.18013.5.1.mDL", "cryptographic_binding_methods_supported": []string{"cose_key"},
+					"proof_types_supported": M{"jwt": M{"proof_signing_alg_values_supported": []string{"ES256"}}}}}})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
 		out(w, 200, M{"issuer": is.URL, "token_endpoint": is.URL + "/token", "authorization_endpoint": is.URL + "/authorize",
@@ -137,6 +140,12 @@ func newMockIssuer(t *testing.T) *mockIssuer {
 		if err != nil || kerr != nil || p.Header["typ"] != "openid4vci-proof+jwt" || verifySig(str(p.Header["alg"]), pub, p.SigningInput, p.Sig) != nil ||
 			str(p.Claims["aud"]) != is.URL || str(p.Claims["nonce"]) != nonce {
 			out(w, 400, M{"error": "invalid_proof"})
+			return
+		}
+		if req.ID == "mdl" { // an mdoc bound to the proof's key
+			m := *is.mdoc
+			m.devicePub, _ = pub.(*ecdsa.PublicKey)
+			out(w, 200, M{"credentials": []M{{"credential": b64url(m.issuerSigned(t))}}})
 			return
 		}
 		disc := func(parts ...any) string {
@@ -297,6 +306,17 @@ func TestVerifiableCredentials(t *testing.T) {
 		wantStatus(t, res, "credential issued", "pass")
 		if _, err := tryOp(t, "vci.issue", M{"offer": is.authOffer(), "allow_private_urls": true}); err == nil || !strings.Contains(err.Error(), "client_id") {
 			t.Errorf("no client_id: %v", err)
+		}
+	})
+
+	t.Run("an mso_mdoc credential", func(t *testing.T) {
+		res := run(t, "vci.issue", M{"offer": is.offer(), "tx_code": "1234", "configuration_id": "mdl", "allow_private_urls": true}, nil)
+		for _, n := range []string{"credential issued", "credential 1: issuer signature", "credential 1: every data element matches its MSO digest",
+			"credential 1: bound to the holder key (MSO device key)"} {
+			wantStatus(t, res, n, "pass")
+		}
+		if fam := res["credential_1"].(M)["namespaces"].(M)["org.iso.18013.5.1"].(M)["family_name"]; fam != "Mustermann" {
+			t.Errorf("mdoc claims: %v", res["credential_1"])
 		}
 	})
 

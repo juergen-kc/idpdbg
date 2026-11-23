@@ -27,7 +27,20 @@ import (
 
 func cborDecode(b []byte) (any, int, error) { return cborItem(b, 0) }
 
-func cborItem(b []byte, depth int) (any, int, error) {
+// cborTag is a tagged item kept as such, with its encoded bytes (some
+// formats, such as mdoc, hash a tagged item exactly as it was encoded).
+type cborTag struct {
+	Num uint64
+	V   any
+	Raw []byte
+}
+
+// cborDecodeTagged decodes like cborDecode but keeps tags as cborTag.
+func cborDecodeTagged(b []byte) (any, int, error) { return cborItemOpt(b, 0, true) }
+
+func cborItem(b []byte, depth int) (any, int, error) { return cborItemOpt(b, depth, false) }
+
+func cborItemOpt(b []byte, depth int, keepTags bool) (any, int, error) {
 	if depth > 32 {
 		return nil, 0, errors.New("cbor: nested too deeply")
 	}
@@ -84,7 +97,7 @@ func cborItem(b []byte, depth int) (any, int, error) {
 		}
 		out := make([]any, 0, arg)
 		for i := uint64(0); i < arg; i++ {
-			v, m, err := cborItem(b[n:], depth+1)
+			v, m, err := cborItemOpt(b[n:], depth+1, keepTags)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -97,12 +110,12 @@ func cborItem(b []byte, depth int) (any, int, error) {
 		}
 		out := map[any]any{}
 		for i := uint64(0); i < arg; i++ {
-			k, m, err := cborItem(b[n:], depth+1)
+			k, m, err := cborItemOpt(b[n:], depth+1, keepTags)
 			if err != nil {
 				return nil, 0, err
 			}
 			n += m
-			v, m, err := cborItem(b[n:], depth+1)
+			v, m, err := cborItemOpt(b[n:], depth+1, keepTags)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -119,7 +132,10 @@ func cborItem(b []byte, depth int) (any, int, error) {
 		}
 		return out, n, nil
 	case 6:
-		v, m, err := cborItem(b[n:], depth+1)
+		v, m, err := cborItemOpt(b[n:], depth+1, keepTags)
+		if err == nil && keepTags {
+			return cborTag{Num: arg, V: v, Raw: append([]byte{}, b[:n+m]...)}, n + m, nil
+		}
 		return v, n + m, err
 	}
 	switch ai {
