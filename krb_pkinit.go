@@ -682,7 +682,7 @@ func kdcContributionCheck(cs *Checks, label string, rep messages.ASRep, replyKey
 			cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "fail", "absent: an anonymous AS-REP must carry it", "RFC 8062 §7")
 			return false
 		}
-		cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "info", "absent: RFC 8062 says a KDC should send it with Diffie-Hellman too (MIT krb5 sends it only for anonymous PKINIT)", "RFC 8062 §7")
+		cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "info", "absent: RFC 8062 says a KDC should send it with Diffie-Hellman too (MIT krb5 sends it only for anonymous PKINIT, Active Directory not at all)", "RFC 8062 §7")
 		return true
 	}
 	cs.add(label+": the KDC contributes to the session key (PA_PKINIT_KX)", "pass", "", "RFC 8062 §7")

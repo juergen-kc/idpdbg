@@ -14,6 +14,23 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- `scripts/smoke.sh`: a smoke test of what CI cannot reach (public
+  services, the binary and its MCP handshake, the interop suites, an Active
+  Directory lab, a security key), one line per check.
+
+### Fixed
+- `pki crl`: a delta CRL with the same number as its base CRL is applied;
+  RFC 5280 §5.2.3 has the CA give both the same number when it issues them
+  together, as AD CS does. Only an older delta, a replay, is refused.
+- `pki crl`: when the CA publishes delta CRLs but no current one can be
+  used (expired, unreachable, for another base), a certificate the base CRL
+  clears is undetermined, not good. Windows treats this as revocation
+  offline, and an Active Directory KDC then refuses PKINIT with
+  KDC_ERR_CLIENT_NOT_TRUSTED; the check says so. Found against AD CS.
+- A CRL location in a directory that refuses an anonymous read (Active
+  Directory does) says how to read it as a user.
+
 ## [0.26.0] - 2026-11-23
 
 ### Security

@@ -109,8 +109,8 @@ func TestCRLFromLDAPWithDelta(t *testing.T) {
 	publish(mkTestCRL(t, p, 12, 0, nil, testDeltaDP), mkTestCRL(t, p, 15, 14, []x509.RevocationListEntry{mine(1)}, ""))
 	r = run(t, "pki.crl", args(nil), nil)
 	wantStatus(t, r, "delta CRL: applies to this base CRL", "fail")
-	if r["cert_status"] != "good" {
-		t.Errorf("foreign delta applied: %v", r)
+	if r["cert_status"] != "undetermined" { // not revoked by it, and no usable delta
+		t.Errorf("foreign delta: %v", r["cert_status"])
 	}
 
 	// A base CRL in place of a delta.
@@ -125,14 +125,32 @@ func TestCRLFromLDAPWithDelta(t *testing.T) {
 		t.Errorf("supplied delta: %v", r)
 	}
 
-	// The delta location is unreachable: the base answer stands, with a warning.
+	// The delta location is unreachable: a later revocation could go
+	// unseen, so the status is undetermined (as Windows judges it).
 	d.mu.Lock()
 	d.put(testCDPDN, map[string][]string{"objectClass": {"cRLDistributionPoint"}, "certificateRevocationList": {string(mkTestCRL(t, p, 12, 0, nil, testDeltaDP))}})
 	d.mu.Unlock()
 	r = run(t, "pki.crl", args(nil), nil)
-	wantStatus(t, r, "delta CRL download", "warn")
-	if r["cert_status"] != "good" {
-		t.Errorf("no delta: %v", r)
+	wantStatus(t, r, "delta CRL download", "fail")
+	wantStatus(t, r, "certificate status with delta CRL", "warn")
+	if r["cert_status"] != "undetermined" {
+		t.Errorf("no delta: %v", r["cert_status"])
+	}
+
+	// A stale delta, as when the CA could not publish: undetermined too.
+	now2 := time.Now()
+	staleTpl := &x509.RevocationList{Number: big.NewInt(13), ThisUpdate: now2.Add(-96 * time.Hour), NextUpdate: now2.Add(-72 * time.Hour)}
+	v, _ := asn1.Marshal(big.NewInt(12))
+	staleTpl.ExtraExtensions = []pkix.Extension{{Id: oidDeltaCRLIndicator, Critical: true, Value: v}}
+	stale, err := x509.CreateRevocationList(rand.Reader, staleTpl, p.ca, p.caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publish(mkTestCRL(t, p, 12, 0, nil, testDeltaDP), stale)
+	r = run(t, "pki.crl", args(nil), nil)
+	wantStatus(t, r, "delta CRL: fresh", "fail")
+	if r["cert_status"] != "undetermined" || !strings.Contains(checkOf(r, "certificate status with delta CRL").Detail, "KDC_ERR_CLIENT_NOT_TRUSTED") {
+		t.Errorf("stale delta: %v", r["cert_status"])
 	}
 
 	// Directory addresses from certificates are public-only unless allowed.
@@ -148,9 +166,9 @@ func TestCRLFromLDAPWithDelta(t *testing.T) {
 	}
 }
 
-// A directory chosen by the certificate gets no credentials, a delta that
-// is not newer than its base is not applied, and a directory cannot send
-// more than an HTTP response may.
+// A directory chosen by the certificate gets no credentials, a delta older
+// than its base (a replay) is not applied while one issued together with it
+// is, and a directory cannot send more than an HTTP response may.
 func TestLDAPCRLHardening(t *testing.T) {
 	p := newCRLPKI(t)
 	d := newMockDirectory(t)
@@ -165,7 +183,7 @@ func TestLDAPCRLHardening(t *testing.T) {
 	d.mu.Lock()
 	d.put(dn, map[string][]string{"objectClass": {"cRLDistributionPoint"},
 		"certificateRevocationList": {string(mkTestCRL(t, p, 12, 0, []x509.RevocationListEntry{hold}, "ldap://"+host+"/"+dn+"?deltaRevocationList"))},
-		"deltaRevocationList":       {string(mkTestCRL(t, p, 12, 11, []x509.RevocationListEntry{release}, ""))}})
+		"deltaRevocationList":       {string(mkTestCRL(t, p, 11, 10, []x509.RevocationListEntry{release}, ""))}})
 	d.mu.Unlock()
 
 	// bind_dn with ldap_url elsewhere: the certificate's directory is read anonymously.
@@ -174,10 +192,26 @@ func TestLDAPCRLHardening(t *testing.T) {
 	if c := checkOf(r, "CRL download"); c == nil || c.Status != "pass" || !strings.Contains(c.Detail, "anonymous") {
 		t.Errorf("certificate-chosen directory: %v", c)
 	}
-	// The delta is numbered like its base: refused, so the hold stands.
-	wantStatus(t, r, "delta CRL: newer than the base CRL", "fail")
+	// The delta is older than its base: refused, so the hold stands.
+	wantStatus(t, r, "delta CRL: not older than the base CRL", "fail")
 	if r["cert_status"] != "revoked" {
-		t.Errorf("stale delta released the hold: %v", r)
+		t.Errorf("a replayed delta released the hold: %v", r)
+	}
+
+	// Base and delta issued together share their number (RFC 5280 §5.2.3,
+	// as AD CS publishes them): applied.
+	d.mu.Lock()
+	d.put(dn, map[string][]string{"objectClass": {"cRLDistributionPoint"},
+		"certificateRevocationList": {string(mkTestCRL(t, p, 12, 0, nil, "ldap://"+host+"/"+dn+"?deltaRevocationList"))},
+		"deltaRevocationList":       {string(mkTestCRL(t, p, 12, 12, nil, ""))}})
+	d.mu.Unlock()
+	r = run(t, "pki.crl", M{"cert": pemOf(leaf, p.ca), "allow_private_urls": true}, nil)
+	noFailures(t, r)
+	if c := checkOf(r, "delta CRL: applies to this base CRL"); c == nil || c.Status != "pass" || !strings.Contains(c.Detail, "issued together") {
+		t.Errorf("same-numbered delta: %+v", c)
+	}
+	if r["cert_status"] != "good" {
+		t.Errorf("same-numbered delta: %v", r["cert_status"])
 	}
 
 	old := maxResponseBody

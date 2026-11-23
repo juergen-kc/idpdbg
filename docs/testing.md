@@ -10,7 +10,9 @@ is in [development.md](development.md#interop-tests).
   enabled: `krb kinit`, `service_ticket` with PAC verification, `s4u`
   (classic and resource-based), `fast`, `pkinit` with a key file and with a
   YubiKey PIV key, KDC discovery through DNS SRV, `ldap` over LDAP, LDAPS and
-  StartTLS including password change and reset, and `spnego http` against IIS.
+  StartTLS including password change and reset, `spnego http` against IIS,
+  and `pki crl` reading AD CS's base and delta CRLs from the directory
+  (`scripts/smoke.sh adlab` repeats most of this).
   Behaviour idpdbg recognises and explains there:
   - S4U2Proxy accepts only forwardable S4U2Self evidence, for resource-based
     delegation too; sensitive accounts and Protected Users members are
@@ -19,6 +21,13 @@ is in [development.md](development.md#interop-tests).
   - PKINIT works in Diffie-Hellman mode; public-key encryption mode is
     refused with KDC_ERR_ETYPE_NOSUPP. The AS-REP returns the PKAuthenticator
     nonce, the KDC signs with SHA-1, and certificates need a strong mapping.
+    It sends no PA_PKINIT_KX, and has no anonymous PKINIT.
+  - AD CS publishes its CRLs at host-less `ldap:///` locations in the
+    configuration partition, which anonymous reads may not see, and issues
+    a base and a delta CRL with the same number. When the CA cannot publish
+    (here: the VM was suspended for days), the delta CRL expires and the KDC
+    refuses PKINIT with KDC_ERR_CLIENT_NOT_TRUSTED; `pki crl` reports the
+    certificate as undetermined and says why.
 - Keycloak 26.8, in CI on every push (`interop_test.go`, realm in
   `testdata/keycloak`). The OIDC side covers:
   - discovery, JWKS, and browser login with PKCE (client secret, or

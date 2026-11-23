@@ -51,6 +51,26 @@ Each script starts a container (stop it with `stop` as the argument). The
 tests are behind the `interop` build tag; `-run Keycloak`, `-run Samba`,
 `-run MIT` or `-run SCIM` picks one server.
 
+## Smoke test
+
+`scripts/smoke.sh` checks what CI cannot reach, before a release: public
+services (OIDC discovery and JWKS at Google and Microsoft, a site's OCSP
+and CRL, the FIDO Metadata Service), the binary itself (the MCP handshake,
+an HTML report), the four interop suites, and optionally an Active
+Directory lab with AD CS and a security key. It prints one line per check
+and a summary:
+
+```bash
+scripts/smoke.sh
+```
+
+```bash
+scripts/smoke.sh adlab
+```
+
+The script's header says what the lab section expects. `IDPDBG=path` tests
+a release binary instead of one built from the tree.
+
 ## Releases
 
 What changed in each release is in [CHANGELOG.md](../CHANGELOG.md). Releases are

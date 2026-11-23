@@ -174,7 +174,11 @@ func fetchLDAPCRL(c *Ctx, raw string, allowPrivate bool) (crl []byte, target str
 	}
 	res, err := conn.Search(ldap.NewSearchRequest(l.DN, l.Scope, ldap.NeverDerefAliases, 2, int(timeout.Seconds()), false, l.Filter, attrs, nil))
 	if err != nil {
-		return nil, target, bind, fmt.Errorf("search %s on %s: %w", l.DN, target, err)
+		hint := ""
+		if !bind && (ldap.IsErrorWithCode(err, ldap.LDAPResultOperationsError) || ldap.IsErrorWithCode(err, ldap.LDAPResultInsufficientAccessRights)) {
+			hint = " (the directory refused an anonymous read, as Active Directory does: read the CRL with pki crl and ldap_url, bind_dn and ldap_password)"
+		}
+		return nil, target, bind, fmt.Errorf("search %s on %s: %w%s", l.DN, target, err, hint)
 	}
 	for _, e := range res.Entries {
 		for _, a := range e.Attributes {
@@ -354,11 +358,20 @@ func applyDelta(cs *Checks, prefix string, delta, base *x509.RevocationList, cer
 		cs.add(p+"applies to this base CRL", "fail", fmt.Sprintf("it needs a base CRL numbered %s or later; the base is %v", indicator, baseNum), "RFC 5280 §5.2.4")
 		return d
 	}
-	if deltaNum == nil || deltaNum.Cmp(baseNum) <= 0 {
-		cs.add(p+"newer than the base CRL", "fail", fmt.Sprintf("delta CRL number %v is not above the base's %s; not applied", deltaNum, baseNum), "RFC 5280 §5.2.3, §5.2.4")
+	// Base and delta CRLs share one number sequence, and ones issued
+	// together carry the same number (RFC 5280 §5.2.3, as AD CS does). An
+	// older delta is a replay, which could release a hold it no longer
+	// means.
+	if deltaNum == nil || deltaNum.Cmp(baseNum) < 0 {
+		cs.add(p+"not older than the base CRL", "fail", fmt.Sprintf("delta CRL number %v is below the base's %s; not applied", deltaNum, baseNum), "RFC 5280 §5.2.3, §5.2.4")
 		return d
 	}
-	cs.add(p+"applies to this base CRL", "pass", fmt.Sprintf("base %s, delta %s", baseNum, deltaNum), "RFC 5280 §5.2.4")
+	detail := fmt.Sprintf("base %s, delta %s", baseNum, deltaNum)
+	if deltaNum.Cmp(baseNum) == 0 {
+		detail += " (issued together, with the same revocations)"
+	}
+	cs.add(p+"applies to this base CRL", "pass", detail, "RFC 5280 §5.2.3, §5.2.4")
+	d["applied"] = true
 	for _, r := range delta.RevokedCertificateEntries {
 		if r.SerialNumber.Cmp(cert.SerialNumber) != 0 {
 			continue
@@ -398,7 +411,11 @@ func fetchAndApplyDelta(c *Ctx, cs *Checks, prefix string, base *x509.Revocation
 			cs.add(prefix+"delta CRL parses", "fail", err.Error(), "RFC 5280 §5.1")
 			return
 		}
-		out["delta_crl"] = applyDelta(cs, prefix, delta, base, cert, issuer, out, "")
+		d := applyDelta(cs, prefix, delta, base, cert, issuer, out, "")
+		out["delta_crl"] = d
+		if d["applied"] != true {
+			deltaUnusable(cs, prefix, out)
+		}
 		return
 	}
 	uris := deltaURIs(base, cert)
@@ -411,7 +428,7 @@ func fetchAndApplyDelta(c *Ctx, cs *Checks, prefix string, base *x509.Revocation
 	for _, u := range uris {
 		b, where, err := fetchCRLBytes(c, u, allowPrivate)
 		if err != nil {
-			cs.add(prefix+"delta CRL download", "warn", err.Error()+"; newer revocations may be missing", "RFC 5280 §5.2.6")
+			cs.add(prefix+"delta CRL download", "fail", err.Error(), "RFC 5280 §5.2.6")
 			continue
 		}
 		cs.add(prefix+"delta CRL download", "pass", where, "RFC 5280 §5.2.6")
@@ -420,9 +437,27 @@ func fetchAndApplyDelta(c *Ctx, cs *Checks, prefix string, base *x509.Revocation
 			cs.add(prefix+"delta CRL parses", "fail", err.Error(), "RFC 5280 §5.1")
 			continue
 		}
-		out["delta_crl"] = applyDelta(cs, prefix, delta, base, cert, issuer, out, u)
+		d := applyDelta(cs, prefix, delta, base, cert, issuer, out, u)
+		out["delta_crl"] = d
+		if d["applied"] != true {
+			deltaUnusable(cs, prefix, out)
+		}
 		return
 	}
+	deltaUnusable(cs, prefix, out)
+}
+
+// deltaUnusable: the CA publishes delta CRLs but the current one could not
+// be used, so a certificate the base CRL clears may have been revoked
+// since. Its status is undetermined, as Windows judges it (revocation
+// offline, which an Active Directory KDC answers with
+// KDC_ERR_CLIENT_NOT_TRUSTED for PKINIT).
+func deltaUnusable(cs *Checks, prefix string, out M) {
+	if out["cert_status"] != "good" {
+		return
+	}
+	out["cert_status"] = "undetermined"
+	cs.add(prefix+"certificate status with delta CRL", "warn", "not on the base CRL, but the CA publishes delta CRLs and no current one could be used (see above), so a later revocation would go unseen. Windows treats this as revocation offline: an Active Directory KDC then refuses PKINIT with KDC_ERR_CLIENT_NOT_TRUSTED", "RFC 5280 §6.3.3")
 }
 
 // checkCRLWithDelta checks a base CRL and, where it leaves the certificate
