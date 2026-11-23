@@ -192,8 +192,11 @@ func certChecks(cs *Checks, c *x509.Certificate, role string) {
 	if role == "signing" {
 		return
 	}
-	if role == "leaf" {
-		if len(c.DNSNames)+len(c.IPAddresses)+len(c.EmailAddresses)+len(c.URIs) == 0 {
+	if role == "leaf" || role == "client" {
+		// Only TLS server certificates need their names in the SAN; client
+		// certificates (PIV, PKINIT, smart card logon) are mapped otherwise.
+		tlsServer := role == "leaf" && (len(c.ExtKeyUsage) == 0 || contains(stringsOf(c.ExtKeyUsage), "serverAuth"))
+		if tlsServer && len(c.DNSNames)+len(c.IPAddresses)+len(c.EmailAddresses)+len(c.URIs) == 0 {
 			cs.add(who+": subjectAltName present", "fail", "names only in the subject CN are ignored by modern clients", "RFC 6125 §6.4.4")
 		}
 		if c.BasicConstraintsValid && c.IsCA {

@@ -198,9 +198,41 @@ section_adlab() {
   run ad-spnego spnego http --url "http://$dc/" --principal "alice@$r" --keytab "$dir/alice.keytab" "${k[@]}" && clean ad-spnego
 }
 
+# run_tty NAME ARGS...: like run, but prompts (touch, PIN) reach the
+# terminal; idpdbg asks for a PIN itself, without echo.
+run_tty() {
+  local n=$1 rc
+  shift
+  "$BIN" "$@" >"$OUT/$n.json"
+  rc=$?
+  if [ $rc -ne 0 ] && [ $rc -ne 2 ]; then
+    bad "$n" "exit status $rc"
+    echo '{}' >"$OUT/$n.json"
+    return 1
+  fi
+}
+
 section_hw() {
-  echo "== security key and PIV card"
-  echo "not written yet" >&2
+  echo "== security key and PIV card (needs touches, and the PIV PIN for PKINIT)"
+  run hw-devices fido devices && field hw-devices '.count >= 1' true
+  run hw-info fido info --metadata && clean hw-info
+  run hw-piv card read --applet piv && clean hw-piv
+  echo ">>> WebAuthn with the key against a test relying party: touch it when asked (4 times)"
+  if IDPDBG_HW_TEST=1 go test -count=1 -run TestWebAuthnSecurityKey -v . 2>&1 | tee "$OUT/hw-webauthn.test" | grep '>>>'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
+    ok "WebAuthn register and sign-in with the key"
+  else
+    bad "WebAuthn with the key" "$(grep -E -- '--- FAIL|_test.go' "$OUT/hw-webauthn.test" | head -3 | tr '\n' ' ')"
+  fi
+  # PKINIT with the key's PIV slot 9a, against the AD lab when it is there.
+  local envf=${IDPDBG_ADLAB_ENV:-$HOME/.config/idpdbg/ad-lab.env}
+  if [ -r "$envf" ]; then
+    local AD_REALM AD_KDC
+    eval "$(grep -E '^(AD_REALM|AD_KDC)=' "$envf")"
+    local dir=${IDPDBG_ADLAB_DIR:-$(dirname "$envf")/ad-lab}
+    echo ">>> PKINIT with PIV slot 9a: enter the PIV PIN when asked"
+    run_tty hw-pkinit krb pkinit --principal "alice@$AD_REALM" --kdc "$AD_KDC" --pkinit-piv-slot 9a --ca-cert "$dir/ca.pem" --mode dh &&
+      want hw-pkinit "DH: PKINIT accepted" pass
+  fi
 }
 
 sections=("$@")

@@ -417,7 +417,7 @@ func pivCertificate(cs *Checks, ts []tlv) M {
 	if !cs.ok(err == nil, "certificate parses", detailOr(err, ""), "RFC 5280") {
 		return nil
 	}
-	certChecks(cs, cert, "leaf")
+	certChecks(cs, cert, "client") // card certificates authenticate their holder
 	return certDetail(cert)
 }
 

@@ -30,6 +30,10 @@ as the release notes, and refuses a tag without one.
   KDC_ERR_CLIENT_NOT_TRUSTED; the check says so. Found against AD CS.
 - A CRL location in a directory that refuses an anonymous read (Active
   Directory does) says how to read it as a user.
+- The "subjectAltName present" check applies only to certificates that
+  could serve TLS (serverAuth, or no extended key usage). `card read` no
+  longer fails a PIV certificate mapped to its account another way, as an
+  Active Directory smart card logon certificate can be.
 
 ## [0.26.0] - 2026-11-23
 

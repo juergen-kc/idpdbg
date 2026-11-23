@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -183,4 +185,36 @@ func TestTLSProbe(t *testing.T) {
 			t.Error("client certificate not sent")
 		}
 	})
+}
+
+// Only a certificate that could serve TLS needs its names in the SAN; a
+// client certificate (PIV, PKINIT) without one is fine.
+func TestCertChecksSANOnlyForTLSServers(t *testing.T) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	mk := func(eku []x509.ExtKeyUsage) *x509.Certificate {
+		tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "alice"}, NotBefore: time.Now().Add(-time.Hour),
+			NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: eku}
+		der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, _ := x509.ParseCertificate(der)
+		return c
+	}
+	sanFail := func(c *x509.Certificate, role string) bool {
+		var cs Checks
+		certChecks(&cs, c, role)
+		for _, ck := range cs {
+			if strings.HasSuffix(ck.Name, "subjectAltName present") && ck.Status == "fail" {
+				return true
+			}
+		}
+		return false
+	}
+	if !sanFail(mk([]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}), "leaf") || !sanFail(mk(nil), "leaf") {
+		t.Error("a TLS server certificate without a SAN passed")
+	}
+	if sanFail(mk([]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}), "leaf") || sanFail(mk(nil), "client") {
+		t.Error("a client certificate without a SAN failed")
+	}
 }
