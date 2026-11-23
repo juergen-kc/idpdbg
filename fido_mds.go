@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -142,7 +143,11 @@ func (b *mdsBlob) stale(now time.Time) bool {
 func fetchMDS(c *Ctx) ([]byte, string, error) {
 	u := mdsFetchURL
 	for hop := 0; hop < 3; hop++ {
-		res, err := c.do("GET", u, nil, nil)
+		ctx := context.Context(c)
+		if hop == 0 { // idpdbg's own URL; where the MDS redirects is the server's choice
+			ctx = context.WithValue(c, builtinURLKey, true)
+		}
+		res, err := c.doCtx(ctx, "GET", u, nil, nil)
 		if err != nil {
 			return nil, u, err
 		}

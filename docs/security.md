@@ -70,12 +70,16 @@ explicitly is always used as given.
   `jwks_uri` and endpoints from its discovery document or metadata, SSF and
   OID4VCI endpoints, OCSP responders and CRL locations from certificates)
   may only reach public addresses, checked when connecting, so a hostile
-  document cannot point idpdbg at the network it runs in. When the URL the
-  caller passed points at a loopback, private or link-local address itself
-  (an internal IdP, a test server on localhost), server-supplied URLs may
-  too; certificate URLs still need `allow_private_urls`, which lifts the
-  rule entirely. Behind an HTTP proxy the address is checked before the
-  proxy is asked, since the proxy then connects.
+  document cannot point idpdbg at the network it runs in. The same holds
+  for URLs that arrive inside content the caller passes (a token, a
+  credential offer, a presentation request, inline metadata) when the
+  caller names no server itself. When the URL the caller passed points at
+  a loopback, private or link-local address (an internal IdP, a test server
+  on localhost), server-supplied URLs may too; over MCP only an address
+  literal or a `localhost` name counts, since a name's DNS is its owner's
+  to answer. `allow_private_urls` lifts the rule entirely, and is the only
+  way for certificate URLs. These requests never go through an HTTP proxy,
+  which would resolve the name again out of reach of the check.
 - Over MCP, a private key that signs or decrypts what the caller supplies
   (`sp_key`, `rp_key`, JWT and JWE keys, a CA's or a holder's key) must be
   passed inline in the call; it is never taken from a profile or the

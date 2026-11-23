@@ -191,13 +191,18 @@ func TestVerifiableCredentials(t *testing.T) {
 	is := newMockIssuer(t)
 
 	t.Run("metadata and offer", func(t *testing.T) {
-		res := run(t, "vci.metadata", M{"issuer": is.URL, "offer": is.offer()}, nil)
+		res := run(t, "vci.metadata", M{"issuer": is.URL, "offer": is.offer(), "allow_private_urls": true}, nil)
 		noFailures(t, res)
 		wantStatus(t, res, "offered configuration pid is in the issuer metadata", "pass")
 		wantStatus(t, res, "transaction code required", "info")
 	})
 
-	issued := run(t, "vci.issue", M{"offer": is.offer(), "tx_code": "1234"}, nil)
+	// The issuer comes from inside the offer, so a loopback test issuer needs
+	// allow_private_urls; without it the offer cannot reach a local address.
+	if _, err := tryOp(t, "vci.issue", M{"offer": is.offer(), "tx_code": "1234"}); err == nil || !strings.Contains(err.Error(), "non-public") {
+		t.Errorf("an offer reached a loopback issuer: %v", err)
+	}
+	issued := run(t, "vci.issue", M{"offer": is.offer(), "tx_code": "1234", "allow_private_urls": true}, nil)
 	noFailures(t, issued)
 	for _, n := range []string{"token response", "nonce from the nonce endpoint", "credential issued", "credential 1: issuer signature", "credential 1: bound to the holder key", "credential 1: vct"} {
 		wantStatus(t, issued, n, "pass")
@@ -207,22 +212,27 @@ func TestVerifiableCredentials(t *testing.T) {
 	holder := string(hk)
 
 	t.Run("issuance failures", func(t *testing.T) {
-		if _, err := runOp(t.Context(), findOp("vci.issue"), M{"offer": is.offer()}, false, nil); err == nil {
+		if _, err := runOp(t.Context(), findOp("vci.issue"), M{"offer": is.offer(), "allow_private_urls": true}, false, nil); err == nil {
 			t.Error("issued without the required tx_code")
 		}
-		wantStatus(t, run(t, "vci.issue", M{"offer": is.offer(), "tx_code": "0000"}, nil), "token response", "fail")
+		wantStatus(t, run(t, "vci.issue", M{"offer": is.offer(), "tx_code": "0000", "allow_private_urls": true}, nil), "token response", "fail")
 	})
 
 	for _, mode := range []string{"direct_post", "direct_post.jwt"} {
 		t.Run("present by "+mode, func(t *testing.T) {
 			v := newMockVerifier(t, is.URL)
 			req := "openid4vp://?client_id=" + url.QueryEscape("x509_san_dns:localhost") + "&request_uri=" + url.QueryEscape(v.base+"/request/"+mode)
-			chk := run(t, "vp.request", M{"request": req, "trust_anchors": certPEM(v.cert)}, nil)
+			// The request_uri comes inside the request: a loopback verifier
+			// needs allow_private_urls.
+			if _, err := tryOp(t, "vp.request", M{"request": req, "trust_anchors": certPEM(v.cert)}); err == nil || !strings.Contains(err.Error(), "non-public") {
+				t.Errorf("a request reached a loopback verifier: %v", err)
+			}
+			chk := run(t, "vp.request", M{"allow_private_urls": true, "request": req, "trust_anchors": certPEM(v.cert)}, nil)
 			noFailures(t, chk)
 			for _, n := range []string{"request object signature", "certificate dNSName matches", "response_uri host is the client_id DNS name", "chains to a trust anchor"} {
 				wantStatus(t, chk, n, "pass")
 			}
-			res := run(t, "vp.present", M{"request": req, "credential": cred, "holder_key": holder, "trust_anchors": certPEM(v.cert)}, nil)
+			res := run(t, "vp.present", M{"allow_private_urls": true, "request": req, "credential": cred, "holder_key": holder, "trust_anchors": certPEM(v.cert)}, nil)
 			noFailures(t, res)
 			wantStatus(t, res, "verifier accepted the presentation", "pass")
 			if strings.Join(res["disclosed"].([]string), ",") != "given_name,nationalities[0],nationalities[1]" || strings.Join(res["withheld"].([]string), ",") != "birthdate,family_name" {
@@ -238,7 +248,7 @@ func TestVerifiableCredentials(t *testing.T) {
 	t.Run("refusals", func(t *testing.T) {
 		v := newMockVerifier(t, is.URL)
 		req := "openid4vp://?client_id=" + url.QueryEscape("x509_san_dns:localhost") + "&request_uri=" + url.QueryEscape(v.base+"/request/elsewhere")
-		res := run(t, "vp.present", M{"request": req, "credential": cred, "holder_key": holder}, nil)
+		res := run(t, "vp.present", M{"allow_private_urls": true, "request": req, "credential": cred, "holder_key": holder}, nil)
 		wantStatus(t, res, "response_uri host is the client_id DNS name", "fail")
 		wantStatus(t, res, "presentation sent", "info")
 		if len(v.received) != 0 || res["vp_token"] != nil {
@@ -247,26 +257,26 @@ func TestVerifiableCredentials(t *testing.T) {
 		good := "openid4vp://?client_id=" + url.QueryEscape("x509_san_dns:localhost") + "&request_uri=" + url.QueryEscape(v.base+"/request/direct_post")
 		other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		ob, _ := json.Marshal(privateJWK(other))
-		wantStatus(t, run(t, "vp.present", M{"request": good, "credential": cred, "holder_key": string(ob), "trust_anchors": certPEM(v.cert)}, nil), "holder_key is the credential's cnf key", "fail")
+		wantStatus(t, run(t, "vp.present", M{"allow_private_urls": true, "request": good, "credential": cred, "holder_key": string(ob), "trust_anchors": certPEM(v.cert)}, nil), "holder_key is the credential's cnf key", "fail")
 		// A certificate nobody vouches for is not an identity.
-		wantStatus(t, run(t, "vp.request", M{"request": good}, nil), "verifier certificate trusted", "fail")
+		wantStatus(t, run(t, "vp.request", M{"allow_private_urls": true, "request": good}, nil), "verifier certificate trusted", "fail")
 		// Unsigned requests: only redirect_uri, and only to that URI.
 		unsigned := func(clientID, responseURI string) string {
 			dq, _ := json.Marshal(M{"credentials": []M{{"id": "pid", "format": "dc+sd-jwt"}}})
 			return "openid4vp://?" + url.Values{"client_id": {clientID}, "response_type": {"vp_token"}, "response_mode": {"direct_post"},
 				"response_uri": {responseURI}, "nonce": {"n"}, "dcql_query": {string(dq)}}.Encode()
 		}
-		noFailures(t, run(t, "vp.request", M{"request": unsigned("redirect_uri:https://v.example/cb", "https://v.example/cb")}, nil))
-		wantStatus(t, run(t, "vp.request", M{"request": unsigned("redirect_uri:https://v.example/cb", "https://attacker.example/cb")}, nil), "response or redirect URI is the client_id", "fail")
+		noFailures(t, run(t, "vp.request", M{"allow_private_urls": true, "request": unsigned("redirect_uri:https://v.example/cb", "https://v.example/cb")}, nil))
+		wantStatus(t, run(t, "vp.request", M{"allow_private_urls": true, "request": unsigned("redirect_uri:https://v.example/cb", "https://attacker.example/cb")}, nil), "response or redirect URI is the client_id", "fail")
 		for _, id := range []string{"verifier.example", "x509_san_dns:verifier.example", "decentralized_identifier:did:web:v.example"} {
-			wantStatus(t, run(t, "vp.request", M{"request": unsigned(id, "https://v.example/cb")}, nil), "request is signed", "fail")
+			wantStatus(t, run(t, "vp.request", M{"allow_private_urls": true, "request": unsigned(id, "https://v.example/cb")}, nil), "request is signed", "fail")
 		}
 		before := len(v.received)
-		r := run(t, "vp.present", M{"request": unsigned("verifier.example", v.base+"/response"), "credential": cred, "holder_key": holder}, nil)
+		r := run(t, "vp.present", M{"allow_private_urls": true, "request": unsigned("verifier.example", v.base+"/response"), "credential": cred, "holder_key": holder}, nil)
 		if len(v.received) != before || r["vp_token"] != nil {
 			t.Error("presented to an unauthenticated verifier without force")
 		}
 		mismatch := "openid4vp://?client_id=" + url.QueryEscape("x509_san_dns:evil.example") + "&request_uri=" + url.QueryEscape(v.base+"/request/direct_post")
-		wantStatus(t, run(t, "vp.request", M{"request": mismatch}, nil), "client_id in the URL equals", "fail")
+		wantStatus(t, run(t, "vp.request", M{"allow_private_urls": true, "request": mismatch}, nil), "client_id in the URL equals", "fail")
 	})
 }

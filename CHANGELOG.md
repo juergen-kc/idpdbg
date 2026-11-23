@@ -19,17 +19,20 @@ as the release notes, and refuses a tag without one.
   `jwks_uri` and endpoints from discovery or metadata, SSF and OID4VCI
   endpoints, and any other origin the caller did not name. A hostile
   discovery document can no longer point idpdbg at loopback, private or
-  link-local addresses (cloud metadata services among them). If the URL
-  the caller passed is itself on such an address (an internal IdP,
-  Keycloak on localhost), server-supplied URLs may be too.
+  link-local addresses (cloud metadata services among them). URLs that
+  come inside content the caller passes (a credential offer, a
+  presentation request) are held the same way when the caller names no
+  server. If the URL the caller passed is itself on such an address (an
+  internal IdP, Keycloak on localhost), server-supplied URLs may be too;
+  over MCP only an address literal or a localhost name counts.
   `--allow-private-urls` is now available on every operation and lifts the
-  rule.
+  rule; local OID4VCI issuers and OID4VP verifiers need it.
 
 ### Changed
-- Public-only requests (the above, and URLs from certificates) work
-  behind an HTTP proxy: the address is checked first and the proxy carries
-  the request. They also try every resolved address, not only the first
-  (an IPv6 address that refused the connection made them fail).
+- Public-only requests (the above, and URLs from certificates) try every
+  resolved address, not only the first (an IPv6 address that refused the
+  connection made them fail). They never use an HTTP proxy; when one is
+  configured and the direct connection fails, the error says so.
 
 ### Added
 - `krb pkinit --anonymous`: anonymous PKINIT (RFC 8062). A TGT for

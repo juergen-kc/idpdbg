@@ -47,8 +47,17 @@ func TestServerNamedURLPolicy(t *testing.T) {
 	if policy("oidc.discover", M{"issuer": "https://1.1.1.1", "allow_private_urls": true}) != nil {
 		t.Error("allow_private_urls did not lift the policy")
 	}
-	if policy("jwt.decode", M{"token": "a.b.c"}) != nil {
-		t.Error("a policy without any caller URL")
+	// With no URL from the caller, every URL came with content (a token, an
+	// offer, inline metadata) and is held to public addresses.
+	if p := policy("jwt.decode", M{"token": "a.b.c"}); p == nil || !p(u("http://127.0.0.1/jwks")) {
+		t.Error("no policy without a caller URL")
+	}
+	// Over MCP a name counts as private only as a literal or a localhost
+	// name: a name's own DNS must not lift the rule.
+	for host, want := range map[string]bool{"127.0.0.1": true, "10.1.2.3": true, "localhost": true, "kc.localhost": true, "8.8.8.8": false} {
+		if got := callerNamedPrivate(&Ctx{Context: context.Background()}, host); got != want {
+			t.Errorf("over MCP, %s counted as private: %v", host, got)
+		}
 	}
 	// Defaults and idpdbg's own listeners are not the caller's choice.
 	if p := policy("oidc.login", M{"issuer": "https://1.1.1.1", "client_id": "c"}); p == nil || !p(u("http://localhost:8765/callback")) {

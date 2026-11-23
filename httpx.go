@@ -110,7 +110,10 @@ func newRecorder(base *tls.Config) *Recorder {
 // caller allows otherwise, or itself pointed idpdbg at a non-public address.
 type ctxKey int
 
-const publicOnlyKey ctxKey = 1
+const (
+	publicOnlyKey ctxKey = 1
+	builtinURLKey ctxKey = 2 // a URL built into idpdbg (the FIDO MDS), not one a server supplied
+)
 
 // Special-purpose ranges (IANA IPv4/IPv6 special-purpose registries) that a
 // public-only request may not reach, on top of non-global-unicast space.
@@ -291,21 +294,20 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt := r.base
 	var resp *http.Response
 	var err error
-	if req.Context().Value(publicOnlyKey) != nil || (r.serverNamed != nil && r.serverNamed(req.URL)) {
+	builtin := req.Context().Value(builtinURLKey) != nil
+	if req.Context().Value(publicOnlyKey) != nil || (!builtin && r.serverNamed != nil && r.serverNamed(req.URL)) {
 		if r.public == nil {
 			return nil, errors.New("no public-only transport")
 		}
 		rt = r.public
-		// Behind a proxy the proxy dials, so the address cannot be pinned:
-		// vet it here and let the proxy carry the request.
-		if p, perr := http.ProxyFromEnvironment(req); perr == nil && p != nil {
-			if _, err = publicIPs(req.Context(), req.URL.Hostname()); err == nil {
-				rt = r.base
-			}
-		}
 	}
-	if err == nil {
-		resp, err = rt.RoundTrip(req)
+	resp, err = rt.RoundTrip(req)
+	if err != nil && rt == r.public {
+		// A proxy would resolve the name again, out of reach of the check,
+		// so public-only requests never use one. Say so when one is set.
+		if p, perr := http.ProxyFromEnvironment(req); perr == nil && p != nil {
+			err = fmt.Errorf("%w (URLs from certificates and server answers are fetched directly, not through the HTTP proxy, so their address can be checked; allow_private_urls sends them through it)", err)
+		}
 	}
 	ex.DurationMs = time.Since(start).Milliseconds()
 	if err != nil {
@@ -381,10 +383,11 @@ func (r *httpResult) payload() any {
 
 // serverNamedPolicy decides which URLs came from a server: every origin the
 // caller did not name (in an argument or a profile, defaults and idpdbg's
-// own listeners aside). They are held to public addresses, so a hostile
-// discovery document or metadata cannot point idpdbg at the network it
-// runs in, unless the caller itself pointed idpdbg at a non-public address
-// (an internal IdP, a test server on localhost) or allows private URLs.
+// own listeners aside), all of them when it named none. They are held to
+// public addresses, so a hostile discovery document, metadata or token
+// cannot point idpdbg at the network it runs in, unless the caller itself
+// pointed idpdbg at a non-public address (an internal IdP, a test server on
+// localhost) or allows private URLs.
 func serverNamedPolicy(c *Ctx) func(*url.URL) bool {
 	if c.Bool("allow_private_urls") || c.Op == nil {
 		return nil
@@ -414,9 +417,6 @@ func serverNamedPolicy(c *Ctx) func(*url.URL) bool {
 			}
 		}
 	}
-	if len(caller) == 0 {
-		return nil // the caller named no server: whatever URLs there are came with its own input
-	}
 	var once sync.Once
 	callerPrivate := false
 	return func(u *url.URL) bool {
@@ -425,11 +425,27 @@ func serverNamedPolicy(c *Ctx) func(*url.URL) bool {
 		}
 		once.Do(func() {
 			for _, h := range hosts {
-				callerPrivate = callerPrivate || nonPublicHost(c, h)
+				callerPrivate = callerPrivate || callerNamedPrivate(c, h)
 			}
 		})
 		return !callerPrivate
 	}
+}
+
+// callerNamedPrivate says whether a host the caller named is a non-public
+// address. On the command line a name counts by what it resolves to, as the
+// person typed it. Over MCP, where a model may have been steered to a name
+// whose DNS its owner controls, only an address literal or a localhost name
+// counts: an attacker's DNS answer must not lift the rule.
+func callerNamedPrivate(c *Ctx, host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	if ip := net.ParseIP(h); ip != nil {
+		return blockedIP(ip)
+	}
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") {
+		return true
+	}
+	return c.CLI && nonPublicHost(c, h)
 }
 
 func (c *Ctx) client() *http.Client {
