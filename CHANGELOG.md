@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-23
+
 ### Added
 - [ROADMAP.md](ROADMAP.md): what is planned next of the features not covered
   yet, in which order, and how each will be tested.
@@ -503,5 +505,6 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/juergen-kc/idpdbg/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/juergen-kc/idpdbg/releases/tag/v0.24.0
