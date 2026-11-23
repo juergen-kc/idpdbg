@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -96,77 +97,75 @@ func domainOfDN(dn string) string {
 // fetchLDAPCRL reads a CRL from a directory. A URL without a host goes to
 // ldap_url, or to the domain named by the DN's DC components. The host is
 // held to the rules for URLs taken from certificates: public addresses
-// only unless allowPrivate, and the stored-secret guard for a bind.
-func fetchLDAPCRL(c *Ctx, raw string, allowPrivate bool) ([]byte, string, error) {
+// only unless allowPrivate. The bind credentials go only to the directory
+// the operator named in ldap_url (and through the stored-secret guard);
+// a directory that a certificate or CRL chose is read anonymously.
+func fetchLDAPCRL(c *Ctx, raw string, allowPrivate bool) (crl []byte, target string, bound bool, err error) {
 	l, err := parseLDAPCRLURL(raw)
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 	scheme, host, port := l.Scheme, l.Host, l.Port
 	if host == "" {
 		if lu := c.Str("ldap_url"); lu != "" {
 			pu, err := url.Parse(lu)
 			if err != nil || (pu.Scheme != "ldap" && pu.Scheme != "ldaps") {
-				return nil, "", fmt.Errorf("ldap_url %q must be an ldap:// or ldaps:// URL", lu)
+				return nil, "", false, fmt.Errorf("ldap_url %q must be an ldap:// or ldaps:// URL", lu)
 			}
 			scheme, host, port = pu.Scheme, pu.Hostname(), pu.Port()
 		} else if host = domainOfDN(l.DN); host == "" {
-			return nil, "", fmt.Errorf("%s names no host and its DN has no DC components; pass ldap_url", raw)
+			return nil, "", false, fmt.Errorf("%s names no host and its DN has no DC components; pass ldap_url", raw)
 		}
 	}
 	if port == "" {
-		port = map[string]string{"ldap": "389", "ldaps": "636"}[scheme]
+		port = defaultPorts[scheme]
 	}
-	target := scheme + "://" + net.JoinHostPort(host, port)
+	target = scheme + "://" + net.JoinHostPort(strings.ToLower(host), port)
+	bind := c.Str("bind_dn") != "" && c.Str("ldap_url") != "" && strings.EqualFold(targetOrigin(c.Str("ldap_url")), target)
 	var ips []net.IP
 	if allowPrivate {
 		addrs, err := net.DefaultResolver.LookupIPAddr(c, host)
 		if err != nil {
-			return nil, target, err
+			return nil, target, false, err
 		}
 		for _, a := range addrs {
 			ips = append(ips, a.IP)
 		}
 	} else if ips, err = publicIPs(c, host); err != nil {
-		return nil, target, err
+		return nil, target, false, err
 	}
 	if len(ips) == 0 {
-		return nil, target, fmt.Errorf("%s does not resolve", host)
+		return nil, target, false, fmt.Errorf("%s does not resolve", host)
 	}
-	if c.Str("bind_dn") != "" {
+	if bind {
 		if err := c.allowDestination("the LDAP bind for the CRL", target); err != nil {
-			return nil, target, err
+			return nil, target, false, err
 		}
 	}
 	// Dial the vetted address itself, so DNS cannot change it in between,
-	// and verify TLS against the host name.
+	// verify TLS against the host name, and cap what the server may send.
 	cfg := c.tlsConfig()
 	if cfg.ServerName == "" {
 		cfg.ServerName = host
 	}
 	timeout := time.Duration(c.Int("timeout")) * time.Second
-	var conn *ldap.Conn
-	for _, ip := range ips {
-		if conn, err = ldap.DialURL(scheme+"://"+net.JoinHostPort(ip.String(), port), ldap.DialWithTLSConfig(cfg), ldap.DialWithDialer(&net.Dialer{Timeout: timeout})); err == nil {
-			break
-		}
-	}
+	conn, err := dialLDAPCapped(scheme, ips, port, cfg, timeout)
 	if err != nil {
-		return nil, target, fmt.Errorf("connect to %s: %w", target, err)
+		return nil, target, false, fmt.Errorf("connect to %s: %w", target, err)
 	}
 	defer conn.Close()
 	conn.SetTimeout(timeout)
 	if c.Bool("starttls") && scheme == "ldap" {
 		if err := conn.StartTLS(cfg); err != nil {
-			return nil, target, fmt.Errorf("StartTLS with %s: %w", target, err)
+			return nil, target, false, fmt.Errorf("StartTLS with %s: %w", target, err)
 		}
 	}
-	if dn := c.Str("bind_dn"); dn != "" {
+	if bind {
 		if _, encrypted := conn.TLSConnectionState(); !encrypted {
-			return nil, target, fmt.Errorf("refusing to send the bind password for the CRL over unencrypted %s; use ldaps://, starttls, or no bind_dn", target)
+			return nil, target, false, fmt.Errorf("refusing to send the bind password for the CRL over unencrypted %s; use ldaps://, starttls, or no bind_dn", target)
 		}
-		if err := conn.Bind(dn, c.Str("ldap_password")); err != nil {
-			return nil, target, fmt.Errorf("bind as %s: %w", dn, err)
+		if err := conn.Bind(c.Str("bind_dn"), c.Str("ldap_password")); err != nil {
+			return nil, target, false, fmt.Errorf("bind as %s: %w", c.Str("bind_dn"), err)
 		}
 	}
 	attrs := []string{l.Attr}
@@ -175,27 +174,83 @@ func fetchLDAPCRL(c *Ctx, raw string, allowPrivate bool) ([]byte, string, error)
 	}
 	res, err := conn.Search(ldap.NewSearchRequest(l.DN, l.Scope, ldap.NeverDerefAliases, 2, int(timeout.Seconds()), false, l.Filter, attrs, nil))
 	if err != nil {
-		return nil, target, fmt.Errorf("search %s on %s: %w", l.DN, target, err)
+		return nil, target, bind, fmt.Errorf("search %s on %s: %w", l.DN, target, err)
 	}
 	for _, e := range res.Entries {
 		for _, a := range e.Attributes {
 			if strings.EqualFold(strings.Split(a.Name, ";")[0], strings.Split(l.Attr, ";")[0]) && len(a.ByteValues) > 0 && len(a.ByteValues[0]) > 0 {
-				return a.ByteValues[0], target, nil
+				return a.ByteValues[0], target, bind, nil
 			}
 		}
 	}
-	return nil, target, fmt.Errorf("%s on %s has no %s value (or the bind may not read it)", l.DN, target, l.Attr)
+	how := "anonymously"
+	if bind {
+		how = "as " + c.Str("bind_dn")
+	}
+	return nil, target, bind, fmt.Errorf("%s on %s has no %s value readable %s", l.DN, target, l.Attr, how)
+}
+
+// cappedConn fails reads once a connection has delivered limit bytes, so
+// a directory cannot make idpdbg hold more than an HTTP response may.
+type cappedConn struct {
+	net.Conn
+	left int64
+}
+
+func (c *cappedConn) Read(p []byte) (int, error) {
+	if c.left <= 0 {
+		return 0, fmt.Errorf("the directory sent more than %d bytes", maxResponseBody)
+	}
+	if int64(len(p)) > c.left {
+		p = p[:c.left]
+	}
+	n, err := c.Conn.Read(p)
+	c.left -= int64(n)
+	return n, err
+}
+
+func dialLDAPCapped(scheme string, ips []net.IP, port string, cfg *tls.Config, timeout time.Duration) (*ldap.Conn, error) {
+	var raw net.Conn
+	var err error
+	for _, ip := range ips {
+		if raw, err = (&net.Dialer{Timeout: timeout}).Dial("tcp", net.JoinHostPort(ip.String(), port)); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	var nc net.Conn = &cappedConn{Conn: raw, left: maxResponseBody}
+	if scheme == "ldaps" {
+		tc := tls.Client(nc, cfg)
+		raw.SetDeadline(time.Now().Add(timeout))
+		if err := tc.Handshake(); err != nil {
+			raw.Close()
+			return nil, err
+		}
+		raw.SetDeadline(time.Time{})
+		nc = tc
+	}
+	conn := ldap.NewConn(nc, scheme == "ldaps")
+	conn.Start()
+	return conn, nil
 }
 
 // fetchCRLBytes downloads a CRL from an http(s) or ldap(s) distribution
 // point and says where it came from.
 func fetchCRLBytes(c *Ctx, u string, allowPrivate bool) ([]byte, string, error) {
 	if strings.HasPrefix(u, "ldap://") || strings.HasPrefix(u, "ldaps://") {
-		b, target, err := fetchLDAPCRL(c, u, allowPrivate)
-		if err == nil {
-			return b, fmt.Sprintf("LDAP %s (%d bytes)", target, len(b)), nil
+		b, target, bound, err := fetchLDAPCRL(c, u, allowPrivate)
+		if err != nil {
+			return nil, "", err
 		}
-		return nil, "", err
+		how := "anonymous"
+		if bound {
+			how = "bound as " + c.Str("bind_dn")
+		} else if c.Str("bind_dn") != "" {
+			how = "anonymous: bind_dn is used only for the directory in ldap_url"
+		}
+		return b, fmt.Sprintf("LDAP %s, %s (%d bytes)", target, how, len(b)), nil
 	}
 	res, err := c.doPublic(allowPrivate, "GET", u, nil, nil)
 	if err != nil {
@@ -300,10 +355,10 @@ func applyDelta(cs *Checks, prefix string, delta, base *x509.RevocationList, cer
 		return d
 	}
 	if deltaNum == nil || deltaNum.Cmp(baseNum) <= 0 {
-		cs.add(p+"newer than the base CRL", "warn", fmt.Sprintf("delta CRL number %v is not above the base's %s", deltaNum, baseNum), "RFC 5280 §5.2.4")
-	} else {
-		cs.add(p+"applies to this base CRL", "pass", fmt.Sprintf("base %s, delta %s", baseNum, deltaNum), "RFC 5280 §5.2.4")
+		cs.add(p+"newer than the base CRL", "fail", fmt.Sprintf("delta CRL number %v is not above the base's %s; not applied", deltaNum, baseNum), "RFC 5280 §5.2.3, §5.2.4")
+		return d
 	}
+	cs.add(p+"applies to this base CRL", "pass", fmt.Sprintf("base %s, delta %s", baseNum, deltaNum), "RFC 5280 §5.2.4")
 	for _, r := range delta.RevokedCertificateEntries {
 		if r.SerialNumber.Cmp(cert.SerialNumber) != 0 {
 			continue

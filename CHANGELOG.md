@@ -22,12 +22,16 @@ as the release notes, and refuses a tag without one.
   locations Active Directory Certificate Services writes by default. Such a
   location goes to `--ldap-url`, or to the domain named by the entry's DN;
   `--bind-dn` and `--ldap-password` read it as a user (only over ldaps:// or
-  `--starttls`). As for http locations, the directory must be on a public
-  address unless `--allow-private-urls` is given. `tls probe --crl` and the
+  `--starttls`, and only from the directory in `--ldap-url`: a directory
+  the certificate or CRL names is read anonymously). As for http
+  locations, the directory must be on a public address unless
+  `--allow-private-urls` is given, and its answer is capped like an HTTP
+  response. `tls probe --crl` and the
   FIDO metadata signer check fetch these locations too.
 - `pki crl` merges delta CRLs: it follows `freshestCRL` from the CRL or the
   certificate (or takes `--delta-crl`), checks the delta's issuer,
-  signature, freshness and that it belongs to the base CRL, and applies it:
+  signature, freshness, that it belongs to the base CRL and is newer than
+  it, and applies it:
   certificates revoked since the base CRL, and certificates released from
   hold (removeFromCRL).
 - CI publishes a base and a delta CRL in Samba AD's configuration partition

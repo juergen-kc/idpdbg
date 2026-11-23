@@ -148,6 +148,47 @@ func TestCRLFromLDAPWithDelta(t *testing.T) {
 	}
 }
 
+// A directory chosen by the certificate gets no credentials, a delta that
+// is not newer than its base is not applied, and a directory cannot send
+// more than an HTTP response may.
+func TestLDAPCRLHardening(t *testing.T) {
+	p := newCRLPKI(t)
+	d := newMockDirectory(t)
+	host := strings.TrimPrefix(d.addr, "ldap://")
+	now := time.Now()
+	dn := "cn=crl,dc=example,dc=com"
+	leaf := mkCert(t, &x509.Certificate{SerialNumber: big.NewInt(0x7777), Subject: pkix.Name{CommonName: "x"}, NotBefore: now.Add(-time.Hour),
+		NotAfter: now.Add(24 * time.Hour), CRLDistributionPoints: []string{"ldap://" + host + "/" + dn}}, p.ca, &p.leafKey.PublicKey, p.caKey)
+	hold := x509.RevocationListEntry{SerialNumber: big.NewInt(0x7777), RevocationTime: now.Add(-time.Hour), ReasonCode: 6}
+	release := hold
+	release.ReasonCode = 8
+	d.mu.Lock()
+	d.put(dn, map[string][]string{"objectClass": {"cRLDistributionPoint"},
+		"certificateRevocationList": {string(mkTestCRL(t, p, 12, 0, []x509.RevocationListEntry{hold}, "ldap://"+host+"/"+dn+"?deltaRevocationList"))},
+		"deltaRevocationList":       {string(mkTestCRL(t, p, 12, 11, []x509.RevocationListEntry{release}, ""))}})
+	d.mu.Unlock()
+
+	// bind_dn with ldap_url elsewhere: the certificate's directory is read anonymously.
+	r := run(t, "pki.crl", M{"cert": pemOf(leaf, p.ca), "ldap_url": "ldaps://dc1.corp.example", "bind_dn": "cn=admin,dc=example,dc=com",
+		"ldap_password": "adminpw", "allow_private_urls": true}, nil)
+	if c := checkOf(r, "CRL download"); c == nil || c.Status != "pass" || !strings.Contains(c.Detail, "anonymous") {
+		t.Errorf("certificate-chosen directory: %v", c)
+	}
+	// The delta is numbered like its base: refused, so the hold stands.
+	wantStatus(t, r, "delta CRL: newer than the base CRL", "fail")
+	if r["cert_status"] != "revoked" {
+		t.Errorf("stale delta released the hold: %v", r)
+	}
+
+	old := maxResponseBody
+	maxResponseBody = 64
+	defer func() { maxResponseBody = old }()
+	r = run(t, "pki.crl", M{"cert": pemOf(leaf, p.ca), "allow_private_urls": true}, nil)
+	if c := checkOf(r, "CRL download"); c == nil || c.Status != "fail" || !strings.Contains(c.Detail, "more than 64 bytes") {
+		t.Errorf("oversized directory answer: %v", c)
+	}
+}
+
 func TestLDAPCRLURL(t *testing.T) {
 	l, err := parseLDAPCRLURL(testBaseCDP)
 	if err != nil {

@@ -124,7 +124,7 @@ MCP tool: `pki_crl`.
 | `--delta-crl` | string | A delta CRL (PEM or base64 DER) to apply instead of downloading the one the CRL or certificate names (freshestCRL). CLI: `@path` reads a file, `-` reads stdin. May be a file path (CLI or profile only). |
 | `--ldap-url` | string | Directory for ldap:/// CRL locations that name no host, as Active Directory Certificate Services writes them, e.g. ldaps://dc1.corp.example; default: the domain in the entry's DN. |
 | `--starttls` | bool | Upgrade ldap:// connections for CRLs with StartTLS. |
-| `--bind-dn` | string | DN to bind as to read CRLs from a directory (needs ldaps:// or starttls); omit for an anonymous bind. |
+| `--bind-dn` | string | DN to bind as to read CRLs from the directory in ldap_url (needs ldaps:// or starttls); other directories, which the certificate chose, are read anonymously. |
 | `--ldap-password` | string | Bind password (prefer env IDPDBG_LDAP_PASSWORD or a profile). Secret: falls back to `IDPDBG_LDAP_PASSWORD`, redacted in traces. |
 | `--allow-private-urls` | bool | Let URLs taken from certificates (OCSP responders, caIssuers) reach loopback, private or link-local addresses, for an internal PKI. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 

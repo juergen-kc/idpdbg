@@ -288,7 +288,7 @@ func init() {
 			{Name: "delta_crl", Type: "string", Path: true, File: true, Desc: "A delta CRL (PEM or base64 DER) to apply instead of downloading the one the CRL or certificate names (freshestCRL)"},
 			{Name: "ldap_url", Type: "string", Desc: "Directory for ldap:/// CRL locations that name no host, as Active Directory Certificate Services writes them, e.g. ldaps://dc1.corp.example; default: the domain in the entry's DN"},
 			{Name: "starttls", Type: "bool", Desc: "Upgrade ldap:// connections for CRLs with StartTLS"},
-			{Name: "bind_dn", Type: "string", Desc: "DN to bind as to read CRLs from a directory (needs ldaps:// or starttls); omit for an anonymous bind"},
+			{Name: "bind_dn", Type: "string", Desc: "DN to bind as to read CRLs from the directory in ldap_url (needs ldaps:// or starttls); other directories, which the certificate chose, are read anonymously"},
 			{Name: "ldap_password", Type: "string", Secret: true, Desc: "Bind password (prefer env IDPDBG_LDAP_PASSWORD or a profile)"},
 			allowPrivateURLs,
 		},
