@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-23
+
 ### Security
 - URLs a server hands back are held to public addresses: a provider's
   `jwks_uri` and endpoints from discovery or metadata, SSF and OID4VCI
@@ -557,6 +559,7 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/juergen-kc/idpdbg/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/juergen-kc/idpdbg/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/juergen-kc/idpdbg/releases/tag/v0.24.0
