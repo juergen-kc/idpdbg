@@ -191,4 +191,47 @@ func TestMdocISOSample(t *testing.T) {
 	}
 	r := run(t, "mdoc.decode", M{"credential": strings.Replace(sample, doe, hex.EncodeToString([]byte("Dog")), 1), "at": "2021-01-01T00:00:00Z"}, nil)
 	wantStatus(t, r, "every data element matches its MSO digest", "fail")
+
+	// Its device MAC, with the session transcript and reader key of Annex D.
+	read := func(name string) string {
+		b, err := os.ReadFile("testdata/mdoc/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(b))
+	}
+	st, key := read("iso-18013-5-annex-d-session-transcript.hex"), read("iso-18013-5-annex-d-reader-key-d.hex")
+	args := M{"credential": sample, "at": "2021-01-01T00:00:00Z", "session_transcript": st, "reader_key": key}
+	r = run(t, "mdoc.decode", args, nil)
+	noFailures(t, r)
+	wantStatus(t, r, "device MAC", "pass")
+	args["session_transcript"] = strings.Replace(st, "a20063312e30", "a20063312e31", 1) // another session
+	wantStatus(t, run(t, "mdoc.decode", args, nil), "device MAC", "fail")
+	args["session_transcript"], args["reader_key"] = st, strings.Repeat("11", 32) // another reader
+	wantStatus(t, run(t, "mdoc.decode", args, nil), "device MAC", "fail")
+	delete(args, "reader_key")
+	wantStatus(t, run(t, "mdoc.decode", args, nil), "device MAC", "info")
+}
+
+// A device signature over a session transcript, as a holder makes it.
+func TestMdocDeviceSignature(t *testing.T) {
+	m := newTestMdocIssuer(t)
+	is := mustCBOR(t, m.issuerSigned(t))
+	transcript := cborEncode([]any{nil, nil, []any{"TestHandover", []byte("session-1")}})
+	nsBytes := cborTag{Num: 24, V: cborEncode(map[any]any{})}
+	dab := deviceAuthenticationBytes(transcript, "org.iso.18013.5.1.mDL", cborEncode(nsBytes))
+	protected := cborEncode(map[any]any{int64(1): int64(-7)})
+	sum := sha256.Sum256(cborEncode([]any{"Signature1", protected, []byte{}, dab}))
+	r, s, _ := ecdsa.Sign(rand.Reader, m.deviceKey, sum[:])
+	sig := append(r.FillBytes(make([]byte, 32)), s.FillBytes(make([]byte, 32))...)
+	resp := cborEncode(map[any]any{"version": "1.0", "status": int64(0), "documents": []any{map[any]any{"docType": "org.iso.18013.5.1.mDL", "issuerSigned": is,
+		"deviceSigned": map[any]any{"nameSpaces": nsBytes, "deviceAuth": map[any]any{"deviceSignature": []any{protected, map[any]any{}, nil, sig}}}}}})
+	args := M{"credential": hex.EncodeToString(resp), "session_transcript": hex.EncodeToString(transcript)}
+	res := run(t, "mdoc.decode", args, nil)
+	noFailures(t, res)
+	wantStatus(t, res, "device signature", "pass")
+	args["session_transcript"] = hex.EncodeToString(cborEncode([]any{nil, nil, []any{"TestHandover", []byte("session-2")}}))
+	wantStatus(t, run(t, "mdoc.decode", args, nil), "device signature", "fail")
+	delete(args, "session_transcript")
+	wantStatus(t, run(t, "mdoc.decode", args, nil), "device authentication", "info")
 }

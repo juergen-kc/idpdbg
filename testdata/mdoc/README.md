@@ -1,6 +1,8 @@
 # mdoc test data
 
-The sample DeviceResponse and its document signer certificate from
+The sample DeviceResponse, its document signer certificate, the session
+transcript (as SessionTranscriptBytes) and the reader's ephemeral private
+key (the P-256 scalar, for the device MAC) from
 ISO/IEC 18013-5:2021 Annex D (D.4.1.2), as hex, taken from the
 OpenWallet Foundation's multipaz project
 (`multipaz/src/commonTest/kotlin/org/multipaz/mdoc/TestVectors.kt`,

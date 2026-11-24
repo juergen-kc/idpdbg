@@ -3,8 +3,11 @@ package main
 import (
 	"bytes"
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/hkdf"
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
@@ -338,6 +341,130 @@ func checkIssuerSigned(cs *Checks, p string, issuerSigned map[any]any, docType s
 	return out
 }
 
+// deviceAuthenticationBytes builds DeviceAuthenticationBytes (§9.1.3.4)
+// from the raw SessionTranscript and DeviceNameSpacesBytes, so that both
+// keep the encoding the device signed.
+func deviceAuthenticationBytes(transcript []byte, docType string, nameSpacesRaw []byte) []byte {
+	da := append([]byte{0x84}, cborEncode("DeviceAuthentication")...)
+	da = append(da, transcript...)
+	da = append(da, cborEncode(docType)...)
+	da = append(da, nameSpacesRaw...)
+	return cborEncode(cborTag{Num: 24, V: da})
+}
+
+// checkDeviceAuth verifies the device's signature or MAC over the session
+// (§9.1.3): DeviceAuthentication = [“DeviceAuthentication”,
+// SessionTranscript, DocType, DeviceNameSpacesBytes].
+func checkDeviceAuth(cs *Checks, p string, deviceSigned map[any]any, docType string, devicePub crypto.PublicKey, transcript, transcriptBytes []byte, readerKey *ecdh.PrivateKey) {
+	ref := mdocRef + " §9.1.3"
+	nsTag, ok := deviceSigned["nameSpaces"].(cborTag)
+	if !ok || nsTag.Num != 24 {
+		cs.add(p+"device namespaces are tag-24 encoded", "fail", "", ref)
+		return
+	}
+	dab := deviceAuthenticationBytes(transcript, docType, nsTag.Raw)
+	auth := mapOf(deviceSigned["deviceAuth"])
+	switch {
+	case auth["deviceSignature"] != nil:
+		sig, err := parseCOSESign1(auth["deviceSignature"])
+		if err != nil {
+			cs.add(p+"device signature", "fail", err.Error(), ref)
+			return
+		}
+		if len(sig.Payload) > 0 {
+			cs.add(p+"device signature payload detached", "warn", "the payload should be detached (nil) and rebuilt by the reader", ref+".4")
+		}
+		sig.Payload = dab
+		if err := sig.verify(devicePub); err != nil {
+			cs.add(p+"device signature", "fail", err.Error()+" (with this session transcript)", ref)
+			return
+		}
+		cs.add(p+"device signature", "pass", "by the MSO's device key over this session transcript", ref)
+	case auth["deviceMac"] != nil:
+		if readerKey == nil {
+			cs.add(p+"device MAC", "info", "not verified: a MAC needs the reader's ephemeral private key (reader_key)", ref)
+			return
+		}
+		arr, _ := untag(auth["deviceMac"]).([]any)
+		if len(arr) != 4 {
+			cs.add(p+"device MAC", "fail", "not a COSE_Mac0", ref)
+			return
+		}
+		protected, _ := arr[0].([]byte)
+		tag, _ := arr[3].([]byte)
+		ph, _, _ := cborDecode(protected)
+		if alg, _ := mapOf(ph)[int64(1)].(int64); alg != 5 {
+			cs.add(p+"device MAC algorithm", "fail", fmt.Sprintf("COSE algorithm %d, want 5 (HMAC 256/256)", alg), ref+".5")
+			return
+		}
+		ecPub, ok := devicePub.(*ecdsa.PublicKey)
+		if !ok {
+			cs.add(p+"device MAC", "fail", "the device key is not an EC key", ref)
+			return
+		}
+		dk, err := ecPub.ECDH()
+		var z []byte
+		if err == nil {
+			z, err = readerKey.ECDH(dk)
+		}
+		if err != nil {
+			cs.add(p+"device MAC", "fail", "ECDH with the device key: "+err.Error(), ref)
+			return
+		}
+		salt := sha256.Sum256(transcriptBytes)
+		key, err := hkdf.Key(sha256.New, z, salt[:], "EMacKey", 32)
+		if err != nil {
+			cs.add(p+"device MAC", "fail", err.Error(), ref)
+			return
+		}
+		mac := hmac.New(sha256.New, key)
+		mac.Write(cborEncode([]any{"MAC0", protected, []byte{}, dab}))
+		if !hmac.Equal(mac.Sum(nil), tag) {
+			cs.add(p+"device MAC", "fail", "the MAC does not verify with this session transcript and reader key", ref)
+			return
+		}
+		cs.add(p+"device MAC", "pass", "EMacKey from the reader key and the MSO's device key, over this session transcript", ref)
+	default:
+		cs.add(p+"device authentication present", "fail", "deviceAuth has neither deviceSignature nor deviceMac", ref)
+	}
+}
+
+// parseReaderKey reads the reader's ephemeral P-256 private key: PEM, a
+// private JWK, or the 32-byte scalar in hex.
+func parseReaderKey(s string) (*ecdh.PrivateKey, error) {
+	s = strings.TrimSpace(s)
+	if b, err := hex.DecodeString(s); err == nil && len(b) == 32 {
+		return ecdh.P256().NewPrivateKey(b)
+	}
+	k, err := loadPrivateKey(s)
+	if err != nil {
+		return nil, err
+	}
+	ek, ok := k.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("a %T, not an EC private key", k)
+	}
+	return ek.ECDH()
+}
+
+// sessionTranscript reads a SessionTranscript, or SessionTranscriptBytes
+// (the same wrapped in tag 24), and returns both encodings.
+func sessionTranscript(s string) (transcript, transcriptBytes []byte, err error) {
+	b, err := mdocBytes(s)
+	if err != nil {
+		return nil, nil, err
+	}
+	v, n, err := cborDecodeTagged(b)
+	if err != nil || n != len(b) {
+		return nil, nil, fmt.Errorf("not one CBOR item (%v)", err)
+	}
+	if t, ok := v.(cborTag); ok && t.Num == 24 {
+		inner, _ := t.V.([]byte)
+		return inner, b, nil
+	}
+	return b, cborEncode(cborTag{Num: 24, V: b}), nil
+}
+
 func sortedAnyKeys(m map[any]any) []any {
 	keys := make([]any, 0, len(m))
 	for k := range m {
@@ -377,6 +504,18 @@ func runMdocDecode(c *Ctx) (M, error) {
 		}
 	}
 	leeway := time.Duration(c.Int("leeway")) * time.Second
+	var transcript, transcriptBytes []byte
+	if s := c.Str("session_transcript"); s != "" {
+		if transcript, transcriptBytes, err = sessionTranscript(s); err != nil {
+			return nil, fmt.Errorf("session_transcript: %w", err)
+		}
+	}
+	var readerKey *ecdh.PrivateKey
+	if s := c.Str("reader_key"); s != "" {
+		if readerKey, err = parseReaderKey(s); err != nil {
+			return nil, fmt.Errorf("reader_key: %w", err)
+		}
+	}
 
 	m := mapOf(top)
 	if m == nil {
@@ -445,7 +584,24 @@ func runMdocDecode(c *Ctx) (M, error) {
 				kind = "deviceMac"
 			}
 			e["device_signed"] = M{"device_auth": kind, "namespaces": mdocJSON(d.deviceSigned["nameSpaces"])}
-			cs.add(p+"device authentication", "info", kind+" present, not verified: it signs the session transcript, which this decoder does not have", mdocRef+" §9.1.3")
+			var devicePub crypto.PublicKey
+			if mso, _ := e["mso"].(M); mso != nil {
+				if jwk, _ := mso["device_key"].(M); jwk != nil {
+					devicePub, _ = jwkPublicKey(map[string]any(jwk))
+				}
+			}
+			dt := d.docType
+			if dt == "" {
+				dt, _ = e["doc_type"].(string)
+			}
+			switch {
+			case transcript == nil:
+				cs.add(p+"device authentication", "info", kind+" present, not verified: pass session_transcript (for OID4VP, vp present builds it)", mdocRef+" §9.1.3")
+			case devicePub == nil:
+				cs.add(p+"device authentication", "fail", "no device key in the MSO to verify it with", mdocRef+" §9.1.3")
+			default:
+				checkDeviceAuth(&cs, p, d.deviceSigned, dt, devicePub, transcript, transcriptBytes, readerKey)
+			}
 		}
 		list = append(list, e)
 	}
@@ -458,12 +614,14 @@ func init() {
 	register(&Op{
 		Name: "mdoc.decode",
 		Summary: "Decode and check an mdoc (ISO/IEC 18013-5: mobile driving licence, EUDI PID in mso_mdoc format): IssuerSigned as OID4VCI returns it, a Document, or a DeviceResponse as an OID4VP vp_token carries it. " +
-			"Checks the issuer's COSE_Sign1 signature with the document signer certificate (its purpose, and its chain to an IACA given as trust_anchors), the Mobile Security Object (version, docType, digest algorithm, validity, device key) and every data element against its digest, and shows the elements by namespace. Device authentication is decoded but not verified.",
+			"Checks the issuer's COSE_Sign1 signature with the document signer certificate (its purpose, and its chain to an IACA given as trust_anchors), the Mobile Security Object (version, docType, digest algorithm, validity, device key) and every data element against its digest, and shows the elements by namespace. With session_transcript it also verifies device authentication: the device signature, or with reader_key the device MAC.",
 		Params: []Param{
 			{Name: "credential", Type: "string", Required: true, File: true, Desc: "The mdoc, CBOR as base64url, base64 or hex (CLI: @file or - for stdin)"},
 			{Name: "trust_anchors", Type: "string", Path: true, Desc: "IACA certificates (PEM) the document signer must chain to"},
 			{Name: "doc_type", Type: "string", Desc: "Expected docType, e.g. org.iso.18013.5.1.mDL or eu.europa.ec.eudi.pid.1"},
 			{Name: "at", Type: "string", Desc: "Judge validity at this time (RFC 3339) instead of now, e.g. for published sample documents"},
+			{Name: "session_transcript", Type: "string", File: true, Desc: "SessionTranscript (or SessionTranscriptBytes), CBOR as hex or base64, to verify the device's signature or MAC over"},
+			{Name: "reader_key", Type: "string", Path: true, Explicit: true, Desc: "The reader's ephemeral private key (PEM, private JWK, or the P-256 scalar in hex), to verify a device MAC"},
 			{Name: "leeway", Type: "int", Desc: "Clock skew allowance in seconds", Default: 60},
 		},
 		Run: runMdocDecode,

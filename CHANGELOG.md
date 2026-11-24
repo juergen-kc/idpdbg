@@ -14,6 +14,13 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- `mdoc decode` verifies device authentication when given the session
+  transcript (`--session-transcript`): the device signature with the MSO's
+  device key, or the device MAC with the reader's ephemeral key
+  (`--reader-key`, derived as EMacKey). Tested with the ISO/IEC 18013-5
+  Annex D session.
+
 ## [0.27.0] - 2026-11-23
 
 ### Added

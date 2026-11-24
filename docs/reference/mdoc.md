@@ -6,7 +6,7 @@
 
 ## mdoc decode
 
-Decode and check an mdoc (ISO/IEC 18013-5: mobile driving licence, EUDI PID in mso_mdoc format): IssuerSigned as OID4VCI returns it, a Document, or a DeviceResponse as an OID4VP vp_token carries it. Checks the issuer's COSE_Sign1 signature with the document signer certificate (its purpose, and its chain to an IACA given as trust_anchors), the Mobile Security Object (version, docType, digest algorithm, validity, device key) and every data element against its digest, and shows the elements by namespace. Device authentication is decoded but not verified.
+Decode and check an mdoc (ISO/IEC 18013-5: mobile driving licence, EUDI PID in mso_mdoc format): IssuerSigned as OID4VCI returns it, a Document, or a DeviceResponse as an OID4VP vp_token carries it. Checks the issuer's COSE_Sign1 signature with the document signer certificate (its purpose, and its chain to an IACA given as trust_anchors), the Mobile Security Object (version, docType, digest algorithm, validity, device key) and every data element against its digest, and shows the elements by namespace. With session_transcript it also verifies device authentication: the device signature, or with reader_key the device MAC.
 
 MCP tool: `mdoc_decode`.
 
@@ -16,6 +16,8 @@ MCP tool: `mdoc_decode`.
 | `--trust-anchors` | string | IACA certificates (PEM) the document signer must chain to. May be a file path (CLI or profile only). |
 | `--doc-type` | string | Expected docType, e.g. org.iso.18013.5.1.mDL or eu.europa.ec.eudi.pid.1. |
 | `--at` | string | Judge validity at this time (RFC 3339) instead of now, e.g. for published sample documents. |
+| `--session-transcript` | string | SessionTranscript (or SessionTranscriptBytes), CBOR as hex or base64, to verify the device's signature or MAC over. CLI: `@path` reads a file, `-` reads stdin. |
+| `--reader-key` | string | The reader's ephemeral private key (PEM, private JWK, or the P-256 scalar in hex), to verify a device MAC. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--leeway` | int | Clock skew allowance in seconds. Default `60`. |
 
 Plus the [common parameters](README.md#common-parameters).

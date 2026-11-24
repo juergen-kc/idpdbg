@@ -54,6 +54,8 @@ func cborEncode(v any) []byte {
 			return head(0, uint64(t))
 		}
 		return head(1, uint64(-1-t))
+	case nil:
+		return []byte{0xF6}
 	case bool:
 		if t {
 			return []byte{0xF5}
