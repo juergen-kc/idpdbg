@@ -124,7 +124,7 @@ What each group covers:
 | Group | Covers |
 |---|---|
 | [`oidc`](docs/reference/oidc.md) | Discovery, login with auth code + PKCE (also implicit and hybrid), PAR, JAR, DPoP, private_key_jwt and mutual TLS client auth, client credentials, password, refresh, device flow, token exchange, introspection, revocation, UserInfo, dynamic registration, logout; `--strict` judges against the OAuth Security BCP (RFC 9700) and `--fapi` against the FAPI 2.0 Security Profile, and `bcp_probe` tests what a server enforces of them |
-| [`jwt`](docs/reference/jwt.md), [`jwks`](docs/reference/jwks.md) | Decode, verify (RS/PS/ES/EdDSA/HS; keys from the issuer, a JWKS, PEM or a secret) and sign JWTs; fetch a JWKS |
+| [`jwt`](docs/reference/jwt.md), [`jwks`](docs/reference/jwks.md) | Decode, verify (RS/PS/ES/EdDSA/HS, and post-quantum ML-DSA; keys from the issuer, a JWKS, PEM or a secret) and sign JWTs; fetch a JWKS |
 | [`jwe`](docs/reference/jwe.md) | Decrypt and encrypt: RSA-OAEP, RSA1_5, ECDH-ES, AES and AES-GCM key wrap, PBES2, dir |
 | [`sdjwt`](docs/reference/sdjwt.md) | SD-JWT and SD-JWT VC: disclosures, reconstructed claims, issuer signature, key binding |
 | [`mdoc`](docs/reference/mdoc.md) | mdoc (ISO/IEC 18013-5, mDL and EUDI PID): issuer signature, document signer chain, MSO validity and element digests |

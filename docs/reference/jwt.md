@@ -46,9 +46,9 @@ MCP tool: `jwt_sign`.
 | Parameter | Type | Description |
 |---|---|---|
 | `--claims` | json | JSON claims, e.g. {"iss":"https://issuer","sub":"alice","aud":"api"}. **Required.** |
-| `--key` | string | Signing key: PEM private key or private JWK. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
+| `--key` | string | Signing key: PEM private key or private JWK (an ML-DSA key as PKCS #8 with its seed, or an AKP JWK). May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--secret` | string | Shared secret for HS256/384/512. Secret: falls back to `IDPDBG_SECRET`, redacted in traces. Over MCP it must be passed in the call, never taken from a profile or the environment. |
-| `--alg` | string | Algorithm; default follows the key (RS256, ES256/384/512, EdDSA) or HS256; PS256/384/512 for RSA-PSS. |
+| `--alg` | string | Algorithm; default follows the key (RS256, ES256/384/512, EdDSA, ML-DSA-44/65/87) or HS256; PS256/384/512 for RSA-PSS. |
 | `--kid` | string | kid header. |
 | `--header` | json | Extra header members as a JSON object. |
 | `--embed-jwk` | bool | Put the public key in the header as jwk. |

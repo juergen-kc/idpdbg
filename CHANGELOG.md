@@ -14,6 +14,19 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- ML-DSA in JOSE (draft-ietf-cose-dilithium): `jwt sign` and `jwt verify`
+  with ML-DSA-44, ML-DSA-65 and ML-DSA-87, keys as `AKP` JWKs (public `pub`,
+  private `priv` seed) with their RFC 7638 thumbprint over `alg`, `kty` and
+  `pub`, and `jwks fetch` naming post-quantum keys. Checked both ways
+  against OpenSSL 4.1: each verifies the other's JWS. The draft may still
+  change.
+- ML-DSA private keys in all three PKCS #8 forms of RFC 9881: idpdbg takes
+  the seed out of OpenSSL's default "seed and expanded key" form (which
+  Go's own parser refuses) after checking that both halves belong
+  together; a key with only the expanded half is refused with how to
+  export the seed.
+
 ## [0.33.0] - 2026-11-24
 
 ### Added

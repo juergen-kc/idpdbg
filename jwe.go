@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/hmac"
+	"crypto/mldsa"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/rsa"
@@ -88,6 +89,20 @@ func loadPrivateKey(s string) (any, error) {
 			return nil, errors.New("the JWK has no private part d")
 		}
 		return &ecdsa.PrivateKey{PublicKey: *pub.(*ecdsa.PublicKey), D: new(big.Int).SetBytes(d)}, nil
+	case "AKP":
+		params := mldsaAlgs[str(k["alg"])]
+		seed, _ := b64urlDecode(str(k["priv"]))
+		if params == nil || len(seed) == 0 {
+			return nil, errors.New("an AKP private JWK needs alg (ML-DSA-44/65/87) and priv (the 32-byte seed)")
+		}
+		priv, err := mldsa.NewPrivateKey(params(), seed)
+		if err != nil {
+			return nil, err
+		}
+		if pub, _ := b64urlDecode(str(k["pub"])); len(pub) > 0 && !bytes.Equal(pub, priv.PublicKey().Bytes()) {
+			return nil, errors.New("the AKP JWK's pub does not belong to its priv")
+		}
+		return priv, nil
 	case "OKP":
 		switch str(k["crv"]) {
 		case "Ed25519":
@@ -786,9 +801,9 @@ func init() {
 			Summary: "Create a signed JWT from JSON claims with a private key (PEM or JWK; RS/PS/ES/EdDSA) or a shared secret (HS256/384/512). Adds iat and, with expires_in, exp. For producing test tokens.",
 			Params: []Param{
 				{Name: "claims", Type: "json", Required: true, Desc: `JSON claims, e.g. {"iss":"https://issuer","sub":"alice","aud":"api"}`},
-				{Name: "key", Type: "string", Path: true, Explicit: true, Desc: "Signing key: PEM private key or private JWK"},
+				{Name: "key", Type: "string", Path: true, Explicit: true, Desc: "Signing key: PEM private key or private JWK (an ML-DSA key as PKCS #8 with its seed, or an AKP JWK)"},
 				{Name: "secret", Type: "string", Secret: true, Explicit: true, Desc: "Shared secret for HS256/384/512"},
-				{Name: "alg", Type: "string", Desc: "Algorithm; default follows the key (RS256, ES256/384/512, EdDSA) or HS256; PS256/384/512 for RSA-PSS"},
+				{Name: "alg", Type: "string", Desc: "Algorithm; default follows the key (RS256, ES256/384/512, EdDSA, ML-DSA-44/65/87) or HS256; PS256/384/512 for RSA-PSS"},
 				{Name: "kid", Type: "string", Desc: "kid header"},
 				{Name: "header", Type: "json", Desc: "Extra header members as a JSON object"},
 				{Name: "embed_jwk", Type: "bool", Desc: "Put the public key in the header as jwk"},

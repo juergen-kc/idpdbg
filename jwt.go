@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/hmac"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -191,6 +192,16 @@ func jwkPublicKey(k M) (any, error) {
 		return ed25519.PublicKey(x), nil
 	case "oct":
 		return b64urlDecode(str(k["k"]))
+	case "AKP":
+		params := mldsaAlgs[str(k["alg"])]
+		if params == nil {
+			return nil, fmt.Errorf("unsupported AKP alg %q (ML-DSA-44, ML-DSA-65 or ML-DSA-87)", str(k["alg"]))
+		}
+		pub, err := b64urlDecode(str(k["pub"]))
+		if err != nil {
+			return nil, errors.New("AKP member pub missing or not base64url")
+		}
+		return mldsa.NewPublicKey(params(), pub)
 	}
 	return nil, fmt.Errorf("unsupported kty %q", str(k["kty"]))
 }
@@ -205,6 +216,8 @@ func jwkThumbprint(k M) string {
 		members = []string{"crv", "kty", "x", "y"}
 	case "OKP":
 		members = []string{"crv", "kty", "x"}
+	case "AKP":
+		members = []string{"alg", "kty", "pub"}
 	default:
 		return ""
 	}
@@ -272,6 +285,15 @@ func verifySig(alg string, key any, signingInput string, sig []byte) error {
 		s := new(big.Int).SetBytes(sig[len(sig)/2:])
 		if !ecdsa.Verify(pub, digest, r, s) {
 			return errors.New("ECDSA signature does not verify")
+		}
+		return nil
+	case mldsaAlgs[alg] != nil:
+		pub, ok := key.(*mldsa.PublicKey)
+		if !ok || pub.Parameters().String() != alg {
+			return fmt.Errorf("%s needs an %s key", alg, alg)
+		}
+		if err := mldsa.Verify(pub, []byte(signingInput), sig, nil); err != nil {
+			return fmt.Errorf("%s signature does not verify", alg)
 		}
 		return nil
 	case alg == "EdDSA":
@@ -405,6 +427,8 @@ func describeJWK(k M) M {
 		out["error"] = err.Error()
 	} else if r, ok := pub.(*rsa.PublicKey); ok {
 		out["bits"] = r.N.BitLen()
+	} else if m, ok := pub.(*mldsa.PublicKey); ok {
+		out["post_quantum"] = m.Parameters().String() + " (FIPS 204; JOSE use per draft-ietf-cose-dilithium)"
 	}
 	if x5c, _ := k["x5c"].([]any); len(x5c) > 0 {
 		if der, err := base64.StdEncoding.DecodeString(str(x5c[0])); err == nil {

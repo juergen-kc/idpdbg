@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
@@ -74,6 +75,9 @@ func privateJWK(k crypto.Signer) M {
 	jwk, _ := publicJWK(k.Public())
 	if ec, ok := k.(*ecdsa.PrivateKey); ok {
 		jwk["d"] = b64url(ec.D.FillBytes(make([]byte, (ec.Curve.Params().BitSize+7)/8)))
+	}
+	if m, ok := k.(*mldsa.PrivateKey); ok {
+		jwk["priv"] = b64url(m.Bytes()) // the seed
 	}
 	return jwk
 }

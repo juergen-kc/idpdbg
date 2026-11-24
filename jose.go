@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/hmac"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -31,6 +32,12 @@ func loadSigner(pemText string) (crypto.Signer, error) {
 			if s, ok := k.(crypto.Signer); ok {
 				return s, nil
 			}
+		}
+		if k, ok, err := parseMLDSAPKCS8(blk.Bytes); ok {
+			if err != nil {
+				return nil, err
+			}
+			return k, nil
 		}
 		if k, err := x509.ParsePKCS1PrivateKey(blk.Bytes); err == nil {
 			return k, nil
@@ -61,6 +68,8 @@ func signerAlg(s crypto.Signer, prefer string) (string, error) {
 		}
 	case ed25519.PublicKey:
 		return "EdDSA", nil
+	case *mldsa.PublicKey:
+		return pub.Parameters().String(), nil
 	}
 	return "", errors.New("unsupported key type for JWT signing")
 }
@@ -79,9 +88,15 @@ func publicJWK(pub crypto.PublicKey) (M, error) {
 		return M{"kty": "EC", "crv": crv, "x": b64url(k.X.FillBytes(make([]byte, size))), "y": b64url(k.Y.FillBytes(make([]byte, size)))}, nil
 	case ed25519.PublicKey:
 		return M{"kty": "OKP", "crv": "Ed25519", "x": b64url(k)}, nil
+	case *mldsa.PublicKey:
+		// draft-ietf-cose-dilithium: an Algorithm Key Pair, bound to one alg.
+		return M{"kty": "AKP", "alg": k.Parameters().String(), "pub": b64url(k.Bytes())}, nil
 	}
 	return nil, errors.New("unsupported public key type")
 }
+
+// mldsaAlgs are the ML-DSA JOSE algorithms (draft-ietf-cose-dilithium).
+var mldsaAlgs = map[string]func() mldsa.Parameters{"ML-DSA-44": mldsa.MLDSA44, "ML-DSA-65": mldsa.MLDSA65, "ML-DSA-87": mldsa.MLDSA87}
 
 func jwsInput(alg string, header, claims M) string {
 	h := M{"alg": alg}
@@ -105,6 +120,12 @@ func signJWS(s crypto.Signer, alg string, header, claims M) (string, error) {
 	switch {
 	case alg == "EdDSA":
 		sig, err = s.Sign(rand.Reader, []byte(input), crypto.Hash(0))
+	case mldsaAlgs[alg] != nil:
+		pub, ok := s.Public().(*mldsa.PublicKey)
+		if !ok || pub.Parameters().String() != alg {
+			return "", fmt.Errorf("%s needs an %s key", alg, alg)
+		}
+		sig, err = s.Sign(rand.Reader, []byte(input), nil) // pure ML-DSA, empty context
 	case strings.HasPrefix(alg, "RS"):
 		sig, err = s.Sign(rand.Reader, digest, ch)
 	case strings.HasPrefix(alg, "PS"):
