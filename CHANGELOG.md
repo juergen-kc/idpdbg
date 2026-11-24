@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-24
+
 ### Added
 - `spire` commands for the SPIRE Server API, over the admin socket or over
   TCP with mTLS (an X509-SVID in the server's `admin_ids`, from files or a
@@ -660,7 +662,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/juergen-kc/idpdbg/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/juergen-kc/idpdbg/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/juergen-kc/idpdbg/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/juergen-kc/idpdbg/compare/v0.26.0...v0.26.1
