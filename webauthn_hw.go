@@ -303,92 +303,119 @@ func hwRegister(c *Ctx, cs *Checks, api *rpAPI, out, o M, origin, rpID string, c
 	var attStmtRaw []byte
 	protocol := "ctap2"
 	uvWanted := false
-	err = withFIDO(c, c.Str("device"), func(d *ctapDevice) error {
-		// A key that speaks only U2F has no getInfo: it offers U2F alone.
-		info := map[any]any{int64(1): []any{"U2F_V2"}}
-		if d.caps&0x04 != 0 {
-			if info, err = getInfo(d); err != nil {
-				return err
-			}
+	plat, err := usePlatform(c)
+	if err != nil {
+		return nil, nil, err
+	}
+	if plat {
+		platformCheckParams(c, cs)
+		protocol, uvWanted = "windows", policy == "required"
+		var algs []int64
+		for _, p := range params {
+			algs = append(algs, p.(map[any]any)["alg"].(int64))
 		}
-		opts, _ := info[int64(4)].(map[any]any)
-		pinSet, _ := opts["clientPin"].(bool)
-		uvNotRqd, _ := opts["makeCredUvNotRqd"].(bool)
-		hasU2F := false
-		for _, v := range strList(info[int64(1)]) {
-			hasU2F = hasU2F || v == "U2F_V2"
-		}
-		mode := c.Str("ctap")
-		u2fOK := !rk && hasU2F && es256 && policy != "required"
-		must := pinSet && (!uvNotRqd || rk) // the key wants the PIN for this makeCredential
-		why := "requested with ctap=u2f"
-		var plan uvPlan
-		switch {
-		case mode == "u2f" && !u2fOK:
-			return errors.New("U2F cannot do this registration (it needs ES256, no discoverable credential, no required user verification, and a key that speaks U2F)")
-		case mode == "u2f":
-			protocol = "u2f"
-		case d.caps&0x04 == 0 && u2fOK:
-			protocol = "u2f"
-			why = "the key speaks only U2F"
-		case d.caps&0x04 == 0:
-			return errors.New("this key speaks only U2F, which cannot do this registration (it needs ES256, no discoverable credential and no required user verification)")
-		case mode == "auto" && must && policy == "discouraged" && u2fOK:
-			protocol = "u2f"
-			why = "the key has a PIN set and needs it for CTAP2 registration, and the relying party discourages user verification, so, like a browser, idpdbg used U2F, which needs only a touch"
-		default:
-			var missing bool
-			if plan, missing, err = planUV(c, d, info, policy, must, permMakeCredential, keyRPID); err != nil {
-				return err
+		var a *platformAttestation
+		a, err = platformAPI.MakeCredential(platformCreate{RPID: keyRPID, RPName: str(rp["name"]), UserID: uid, UserName: str(user["name"]),
+			UserDisplayName: str(user["displayName"]), ClientDataJSON: cd, Algs: algs, Exclude: excludeIDs, ResidentKey: rk,
+			UserVerification: uvPolicy(policy), Timeout: fidoTimeout(c)})
+		if err == nil {
+			out["key"] = M{"product": "chosen in the " + platformAPI.Name() + " dialog", "protocol": "windows", "transport": a.Transport}
+			cs.add("protocol", "info", platformAPI.Name()+": Windows let the person choose the key and asked for its PIN and touch", "WebAuthn §5.1.3")
+			authBytes, attStmtRaw = a.AuthData, a.AttStmtRaw
+			stmt := map[any]any{}
+			if v, _, derr := cborDecode(a.AttStmtRaw); derr == nil {
+				stmt, _ = v.(map[any]any)
 			}
-			if missing {
-				if mode != "auto" || !u2fOK {
-					return errors.New("this registration needs the key's PIN: " + pinMissingHint)
+			att = map[any]any{"fmt": a.Format, "attStmt": stmt, "authData": a.AuthData}
+		}
+	} else {
+		err = withFIDO(c, c.Str("device"), func(d *ctapDevice) error {
+			// A key that speaks only U2F has no getInfo: it offers U2F alone.
+			info := map[any]any{int64(1): []any{"U2F_V2"}}
+			if d.caps&0x04 != 0 {
+				if info, err = getInfo(d); err != nil {
+					return err
 				}
+			}
+			opts, _ := info[int64(4)].(map[any]any)
+			pinSet, _ := opts["clientPin"].(bool)
+			uvNotRqd, _ := opts["makeCredUvNotRqd"].(bool)
+			hasU2F := false
+			for _, v := range strList(info[int64(1)]) {
+				hasU2F = hasU2F || v == "U2F_V2"
+			}
+			mode := c.Str("ctap")
+			u2fOK := !rk && hasU2F && es256 && policy != "required"
+			must := pinSet && (!uvNotRqd || rk) // the key wants the PIN for this makeCredential
+			why := "requested with ctap=u2f"
+			var plan uvPlan
+			switch {
+			case mode == "u2f" && !u2fOK:
+				return errors.New("U2F cannot do this registration (it needs ES256, no discoverable credential, no required user verification, and a key that speaks U2F)")
+			case mode == "u2f":
 				protocol = "u2f"
-				why = "a browser would ask for the key's PIN here; without one (" + pinMissingHint + ") idpdbg used U2F, which needs only a touch"
+			case d.caps&0x04 == 0 && u2fOK:
+				protocol = "u2f"
+				why = "the key speaks only U2F"
+			case d.caps&0x04 == 0:
+				return errors.New("this key speaks only U2F, which cannot do this registration (it needs ES256, no discoverable credential and no required user verification)")
+			case mode == "auto" && must && policy == "discouraged" && u2fOK:
+				protocol = "u2f"
+				why = "the key has a PIN set and needs it for CTAP2 registration, and the relying party discourages user verification, so, like a browser, idpdbg used U2F, which needs only a touch"
+			default:
+				var missing bool
+				if plan, missing, err = planUV(c, d, info, policy, must, permMakeCredential, keyRPID); err != nil {
+					return err
+				}
+				if missing {
+					if mode != "auto" || !u2fOK {
+						return errors.New("this registration needs the key's PIN: " + pinMissingHint)
+					}
+					protocol = "u2f"
+					why = "a browser would ask for the key's PIN here; without one (" + pinMissingHint + ") idpdbg used U2F, which needs only a touch"
+				}
 			}
-		}
-		out["key"] = M{"product": d.info.Manufacturer + " " + d.info.Product, "protocol": protocol}
-		if protocol == "u2f" {
-			cs.add("protocol", "info", "U2F register (CTAP1): "+why, "CTAP 2.1 §10")
-			if len(excludeIDs) > 0 && u2fExcluded(c, d, rpHash[:], excludeIDs) {
-				return &ctapError{code: 0x19}
+			out["key"] = M{"product": d.info.Manufacturer + " " + d.info.Product, "protocol": protocol}
+			if protocol == "u2f" {
+				cs.add("protocol", "info", "U2F register (CTAP1): "+why, "CTAP 2.1 §10")
+				if len(excludeIDs) > 0 && u2fExcluded(c, d, rpHash[:], excludeIDs) {
+					return &ctapError{code: 0x19}
+				}
+				ad, stmt, err := u2fRegister(c, d, cdHash[:], rpHash[:])
+				if err != nil {
+					return err
+				}
+				authBytes, attStmtRaw = ad, cborEncode(stmt)
+				att = map[any]any{"fmt": "fido-u2f", "attStmt": stmt, "authData": ad}
+				return nil
 			}
-			ad, stmt, err := u2fRegister(c, d, cdHash[:], rpHash[:])
+			cs.add("protocol", "info", "CTAP2 authenticatorMakeCredential"+uvNote(plan), "CTAP 2.1 §6.1")
+			uvWanted = plan.how != ""
+			req := map[any]any{1: cdHash[:], 2: map[any]any{"id": keyRPID, "name": str(rp["name"])},
+				3: map[any]any{"id": uid, "name": str(user["name"]), "displayName": str(user["displayName"])}, 4: params}
+			if len(exclude) > 0 {
+				req[5] = exclude
+			}
+			if rk {
+				req[7] = map[any]any{"rk": true}
+			}
+			plan.params(req, cdHash[:], 8, 9, 7)
+			resp, err := d.cbor(ctapMakeCredential, req, fidoTimeout(c))
 			if err != nil {
 				return err
 			}
-			authBytes, attStmtRaw = ad, cborEncode(stmt)
-			att = map[any]any{"fmt": "fido-u2f", "attStmt": stmt, "authData": ad}
+			vals, raws, err := cborMapFields(resp)
+			if err != nil {
+				return err
+			}
+			fmtName, _ := vals[int64(1)].(string)
+			authBytes, _ = vals[int64(2)].([]byte)
+			stmt, _ := vals[int64(3)].(map[any]any)
+			attStmtRaw = raws[int64(3)]
+			att = map[any]any{"fmt": fmtName, "attStmt": stmt, "authData": authBytes}
 			return nil
-		}
-		cs.add("protocol", "info", "CTAP2 authenticatorMakeCredential"+uvNote(plan), "CTAP 2.1 §6.1")
-		uvWanted = plan.how != ""
-		req := map[any]any{1: cdHash[:], 2: map[any]any{"id": keyRPID, "name": str(rp["name"])},
-			3: map[any]any{"id": uid, "name": str(user["name"]), "displayName": str(user["displayName"])}, 4: params}
-		if len(exclude) > 0 {
-			req[5] = exclude
-		}
-		if rk {
-			req[7] = map[any]any{"rk": true}
-		}
-		plan.params(req, cdHash[:], 8, 9, 7)
-		resp, err := d.cbor(ctapMakeCredential, req, fidoTimeout(c))
-		if err != nil {
-			return err
-		}
-		vals, raws, err := cborMapFields(resp)
-		if err != nil {
-			return err
-		}
-		fmtName, _ := vals[int64(1)].(string)
-		authBytes, _ = vals[int64(2)].([]byte)
-		stmt, _ := vals[int64(3)].(map[any]any)
-		attStmtRaw = raws[int64(3)]
-		att = map[any]any{"fmt": fmtName, "attStmt": stmt, "authData": authBytes}
-		return nil
-	})
+		})
+	}
 	if err != nil {
 		cs.add("security key made a credential", "fail", err.Error(), "CTAP 2.1 §6.1")
 		return nil, nil, nil
@@ -511,61 +538,94 @@ func hwLogin(c *Ctx, cs *Checks, api *rpAPI, out, o M, sc *softCredential, origi
 	presence := tamper != "no_user_present"
 	var authBytes, sig, userHandle []byte
 	uvWanted := false
-	err = withFIDO(c, c.Str("device"), func(d *ctapDevice) error {
-		out["key"] = M{"product": d.info.Manufacturer + " " + d.info.Product}
-		if c.Str("ctap") == "u2f" && policy == "required" {
-			return errors.New("U2F cannot verify the user, which the relying party requires")
+	plat, err := usePlatform(c)
+	if err != nil {
+		return nil, 0, err
+	}
+	if plat {
+		if !presence {
+			return nil, 0, errors.New("tamper no_user_present talks to the key directly: the Windows WebAuthn API always asks for a touch (pass a device from fido.devices, which needs administrator rights)")
 		}
-		if discoverable && (c.Str("ctap") == "u2f" || d.caps&0x04 == 0) {
-			return errors.New("a passkey sign-in needs CTAP2: U2F cannot find credentials by itself")
-		}
-		if c.Str("ctap") != "u2f" && d.caps&0x04 != 0 {
-			info, err := getInfo(d)
-			if err != nil {
-				return err
-			}
-			plan, missing, err := planUV(c, d, info, policy, false, permGetAssertion, rpID)
-			if err != nil {
-				return err
-			}
-			if missing {
-				if policy == "required" {
-					return errors.New("the relying party requires user verification, which needs the key's PIN: " + pinMissingHint)
+		platformCheckParams(c, cs)
+		uvWanted = policy == "required"
+		var ids [][]byte
+		for _, a := range allow {
+			if m, ok := a.(map[any]any); ok {
+				if id, ok := m["id"].([]byte); ok {
+					ids = append(ids, id)
 				}
-				cs.add("user verification", "info", "a browser would ask for the key's PIN here; without one ("+pinMissingHint+") the assertion carries no UV", "WebAuthn §5.4.6")
 			}
-			uvWanted = plan.how != ""
-			req := map[any]any{1: rpID, 2: cdHash[:], 5: map[any]any{"up": presence}}
-			if len(allow) > 0 {
-				req[3] = allow
+		}
+		var r *platformAssertion
+		r, err = platformAPI.GetAssertion(platformGet{RPID: rpID, ClientDataJSON: cd, Allow: ids, UserVerification: uvPolicy(policy), Timeout: fidoTimeout(c)})
+		if err == nil {
+			out["key"] = M{"product": "chosen in the " + platformAPI.Name() + " dialog", "protocol": "windows"}
+			cs.add("protocol", "info", platformAPI.Name()+": Windows let the person choose the key (and, for a passkey, the account) and asked for its PIN and touch", "WebAuthn §5.1.4")
+			authBytes, sig, userHandle = r.AuthData, r.Signature, r.UserHandle
+			switch {
+			case discoverable:
+				credID = r.CredID
+			case !bytes.Equal(r.CredID, credID):
+				err = fmt.Errorf("Windows answered with credential %s, not the one asked for", b64url(r.CredID))
 			}
-			plan.params(req, cdHash[:], 6, 7, 5)
-			resp, err := d.cbor(ctapGetAssertion, req, fidoTimeout(c))
-			var ce *ctapError
-			if err == nil {
-				as, err := collectAssertions(d, resp)
+		}
+	} else {
+		err = withFIDO(c, c.Str("device"), func(d *ctapDevice) error {
+			out["key"] = M{"product": d.info.Manufacturer + " " + d.info.Product}
+			if c.Str("ctap") == "u2f" && policy == "required" {
+				return errors.New("U2F cannot verify the user, which the relying party requires")
+			}
+			if discoverable && (c.Str("ctap") == "u2f" || d.caps&0x04 == 0) {
+				return errors.New("a passkey sign-in needs CTAP2: U2F cannot find credentials by itself")
+			}
+			if c.Str("ctap") != "u2f" && d.caps&0x04 != 0 {
+				info, err := getInfo(d)
 				if err != nil {
 					return err
 				}
-				a := as[0]
-				if discoverable {
-					if a, err = chooseAccount(c, cs, out, as, withhold); err != nil {
+				plan, missing, err := planUV(c, d, info, policy, false, permGetAssertion, rpID)
+				if err != nil {
+					return err
+				}
+				if missing {
+					if policy == "required" {
+						return errors.New("the relying party requires user verification, which needs the key's PIN: " + pinMissingHint)
+					}
+					cs.add("user verification", "info", "a browser would ask for the key's PIN here; without one ("+pinMissingHint+") the assertion carries no UV", "WebAuthn §5.4.6")
+				}
+				uvWanted = plan.how != ""
+				req := map[any]any{1: rpID, 2: cdHash[:], 5: map[any]any{"up": presence}}
+				if len(allow) > 0 {
+					req[3] = allow
+				}
+				plan.params(req, cdHash[:], 6, 7, 5)
+				resp, err := d.cbor(ctapGetAssertion, req, fidoTimeout(c))
+				var ce *ctapError
+				if err == nil {
+					as, err := collectAssertions(d, resp)
+					if err != nil {
 						return err
 					}
-					credID = a.credID
+					a := as[0]
+					if discoverable {
+						if a, err = chooseAccount(c, cs, out, as, withhold); err != nil {
+							return err
+						}
+						credID = a.credID
+					}
+					authBytes, sig, userHandle = a.authData, a.sig, a.user
+					cs.add("protocol", "info", "CTAP2 authenticatorGetAssertion"+uvNote(plan), "CTAP 2.1 §6.2")
+					return nil
 				}
-				authBytes, sig, userHandle = a.authData, a.sig, a.user
-				cs.add("protocol", "info", "CTAP2 authenticatorGetAssertion"+uvNote(plan), "CTAP 2.1 §6.2")
-				return nil
+				if !(errors.As(err, &ce) && (ce.code == 0x2E || ce.code == 0x36) && sc.Protocol == "u2f" && c.Str("ctap") == "auto") {
+					return err
+				}
 			}
-			if !(errors.As(err, &ce) && (ce.code == 0x2E || ce.code == 0x36) && sc.Protocol == "u2f" && c.Str("ctap") == "auto") {
-				return err
-			}
-		}
-		cs.add("protocol", "info", "U2F authenticate (CTAP1)", "CTAP 2.1 §10")
-		authBytes, sig, err = u2fAuthenticate(c, d, cdHash[:], rpHash[:], credID, presence)
-		return err
-	})
+			cs.add("protocol", "info", "U2F authenticate (CTAP1)", "CTAP 2.1 §10")
+			authBytes, sig, err = u2fAuthenticate(c, d, cdHash[:], rpHash[:], credID, presence)
+			return err
+		})
+	}
 	if err != nil {
 		cs.add("security key signed the assertion", "fail", err.Error(), "CTAP 2.1 §6.2")
 		return nil, 0, nil
