@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-24
+
 ### Added
 - Security keys on Windows without administrator rights: `webauthn
   register` and `webauthn login` go through the Windows WebAuthn API
@@ -22,7 +24,9 @@ as the release notes, and refuses a tag without one.
   still builds the client data, so everything the key returns is checked
   and the tamper tests work as before. A named device keeps the direct
   path (which on Windows needs administrator rights); `--ctap u2f` and
-  `--tamper no_user_present` need it. Called without cgo. Tested against an
+  `--tamper no_user_present` need it. Without a desktop session to show
+  Windows' dialog on, idpdbg refuses up front, and it gives up when Windows
+  has not answered by the timeout. Called without cgo. Tested against an
   emulated API and by hand on Windows Server 2022 with a YubiKey.
 
 ### Changed
@@ -738,7 +742,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/juergen-kc/idpdbg/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/juergen-kc/idpdbg/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/juergen-kc/idpdbg/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/juergen-kc/idpdbg/compare/v0.29.0...v0.30.0
