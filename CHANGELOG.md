@@ -14,6 +14,17 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- Security keys on Windows without administrator rights: `webauthn
+  register` and `webauthn login` go through the Windows WebAuthn API
+  (webauthn.dll) by default there, or with `--device windows`. Windows shows
+  its own dialogs to choose the key, enter its PIN and touch it; idpdbg
+  still builds the client data, so everything the key returns is checked
+  and the tamper tests work as before. A named device keeps the direct
+  path (which on Windows needs administrator rights); `--ctap u2f` and
+  `--tamper no_user_present` need it. Called without cgo. Tested against an
+  emulated API and by hand on Windows Server 2022 with a YubiKey.
+
 ### Changed
 - The `tls probe` hint about ML-DSA-signed chains now says it is a
   deliberate Go 1.27 workaround for TLS-inspecting middleboxes

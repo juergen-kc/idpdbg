@@ -136,7 +136,7 @@ What each group covers:
 | [`spnego`](docs/reference/spnego.md) | Negotiate sign-on to a web resource: offered schemes, NTLM fallback, mutual authentication |
 | [`pki`](docs/reference/pki.md) | Certificate, chain, CSR and CRL decoding, chain verification, a throwaway test CA, leaf issuance, OCSP and CRL revocation checks; post-quantum ML-DSA keys and signatures |
 | [`tls`](docs/reference/tls.md) | Versions, cipher, key exchange (post-quantum or not), ALPN, chain trust, OCSP stapling, client certificates, mutual TLS, LDAP and SMTP StartTLS |
-| [`webauthn`](docs/reference/webauthn.md) | Decode ceremonies; register and sign in against a relying party with a software authenticator or a real security key; `--tamper` negative tests |
+| [`webauthn`](docs/reference/webauthn.md) | Decode ceremonies; register and sign in against a relying party with a software authenticator or a real security key (on Windows through the Windows WebAuthn API, no administrator rights needed); `--tamper` negative tests |
 | [`fido`](docs/reference/fido.md) | Security keys over USB or an NFC reader, CTAP2 authenticatorGetInfo, the passkeys a key stores (list and delete, CTAP 2.1 credential management), FIDO Metadata Service (MDS3) lookups |
 | [`card`](docs/reference/card.md) | Read cards and YubiKeys over PC/SC; decode APDUs, PIV and OpenPGP objects; generate a PIV key on the card and import its certificate; sign, authenticate and decrypt with an OpenPGP card, checked against its public key and fingerprint |
 | [`oath`](docs/reference/oath.md), [`yubico`](docs/reference/yubico.md) | HOTP and TOTP codes; Yubico OTP decoding and checks |

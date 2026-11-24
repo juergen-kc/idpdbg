@@ -107,6 +107,12 @@ PKINIT, although RFC 8062 says it should with Diffie-Hellman too.
   about.
 - YubiKey 5 (PIV): key generation on the card, certificate import with a
   PIN-protected management key, and PKINIT.
+- Windows Server 2022 (by hand, the Parallels lab VM, with the YubiKey
+  passed through): WebAuthn registration (attestation none and direct) and
+  sign-in, including a tampered origin the server rejects, through the
+  Windows WebAuthn API. Parallels' virtual USB hub can fail to start in the
+  guest (CM_PROB_FAILED_START), hiding passed-through keys;
+  `pnputil /restart-device "USB\VID_203A&PID_FFFE\PW3.0"` brings it back.
 - OpenSSL 4.1 (by hand): idpdbg decodes and verifies OpenSSL's ML-DSA root,
   leaf and CSR (kept in `testdata/pq` and tested), and OpenSSL verifies an
   ML-DSA chain from `pki ca`. As a TLS server OpenSSL refuses idpdbg's
@@ -130,7 +136,7 @@ order.
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
 profiles; WS-Trust renew/cancel, proof-of-possession
 keys; the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
-on security keys, setting or changing the PIN, Bluetooth, and Windows (credential management and NFC are tested against emulated keys only);
+on security keys, setting or changing the PIN, Bluetooth, and on Windows the fido commands without administrator rights (credential management and NFC are tested against emulated keys only);
 on smart cards, OpenPGP key generation and import, changing PIV PINs,
 PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; for SPIRE, banning or deleting agents, CA rotation and federation changes; XACML AttributeSelector (XPath) and ALFA;
 composite (hybrid) and SLH-DSA certificates; indirect CRLs.

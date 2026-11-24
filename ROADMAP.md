@@ -44,8 +44,6 @@ Legacy or niche: planned when someone needs them.
   taint, revoke), and changing federation relationships and bundles
 - Composite (hybrid ML-DSA plus classical) and SLH-DSA certificates, once
   Go's standard library supports them
-- Security keys on Windows, through Windows' own WebAuthn API (Windows lets
-  only administrators talk to keys directly)
 - The Digital Credentials API: it is a browser API, so idpdbg could at most
   build and check the verifier's side
 
