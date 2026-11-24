@@ -87,7 +87,7 @@ Plus the [common parameters](README.md#common-parameters).
 
 Have a SPIRE server mint an X509-SVID (for a key idpdbg makes, returned with it) or a JWT-SVID for any SPIFFE ID in its trust domain, and check it against the specifications and the server's bundle. Needs administrator access.
 
-MCP tool: `spire_mint`.
+MCP tool: `spire_mint`. **Changes data at the remote system.**
 
 | Parameter | Type | Description |
 |---|---|---|

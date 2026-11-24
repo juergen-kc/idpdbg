@@ -416,7 +416,7 @@ func prepareGuarded(op *Op, raw M, cli bool) (M, map[string]string, *secretGuard
 	return args, stored, guard, nil
 }
 
-var defaultPorts = map[string]string{"http": "80", "https": "443", "ldap": "389", "ldaps": "636", "kerberos": "88"}
+var defaultPorts = map[string]string{"http": "80", "https": "443", "ldap": "389", "ldaps": "636", "kerberos": "88", "spire": "8081"}
 
 // targetOrigin is the scheme://host:port of a URL-valued argument, or "".
 func targetOrigin(v any) string {
@@ -478,6 +478,13 @@ func guardStoredSecrets(op *Op, args, raw, prof M, stored map[string]string, cli
 		if _, explicit := raw["ca_cert"]; explicit {
 			return nil, fmt.Errorf("refusing a caller-supplied ca_cert while the stored secret %q is in use: extra trust anchors can only be added from the CLI or in the profile", secret)
 		}
+		// The SPIRE server is verified against bundle and trust_domain, so
+		// they are trust anchors too.
+		for _, n := range []string{"bundle", "trust_domain"} {
+			if _, explicit := raw[n]; explicit && op.group() == "spire" {
+				return nil, fmt.Errorf("refusing a caller-supplied %s while the stored credential %q is in use: it decides which server is trusted, so it can only come from the CLI or the profile", n, secret)
+			}
+		}
 		if _, explicit := raw["client_assertion_aud"]; explicit {
 			return nil, fmt.Errorf("refusing a caller-supplied client_assertion_aud while the stored credential %q is in use: set it in the profile instead", secret)
 		}
@@ -492,6 +499,12 @@ func guardStoredSecrets(op *Op, args, raw, prof M, stored map[string]string, cli
 	for k, v := range prof {
 		if o := targetOrigin(v); o != "" {
 			allowed[o] = true
+		}
+		// A profile's SPIRE server is host[:port], with or without a scheme.
+		if k == "server" {
+			if o, _ := spireOrigin(str(v)); o != "" {
+				allowed[o] = true
+			}
 		}
 		// A profile's KDCs are host[:port] without a scheme.
 		if k == "kdc" {
@@ -521,6 +534,7 @@ func guardStoredSecrets(op *Op, args, raw, prof M, stored map[string]string, cli
 			allowed["https://"+strings.ToLower(h)+":443"] = true
 			allowed["ldaps://"+strings.ToLower(h)+":636"] = true
 			allowed["kerberos://"+strings.ToLower(h)+":88"] = true
+			allowed["spire://"+strings.ToLower(h)+":8081"] = true
 		}
 	}
 	params := map[string]Param{}

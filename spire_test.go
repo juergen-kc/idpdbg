@@ -349,3 +349,46 @@ func TestSPIRETCPNeedsClientSVID(t *testing.T) {
 		t.Errorf("no key: %v", err)
 	}
 }
+
+// A stored client SVID key only goes to the profile's SPIRE server, and an
+// MCP caller cannot swap the trust anchors the server is verified with.
+func TestSPIREStoredKeyGuard(t *testing.T) {
+	dir := filepath.ToSlash(t.TempDir())
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err := os.WriteFile(dir+"/svid.key", []byte(keyPEM(key)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("IDPDBG_CONFIG", dir+"/config.json")
+	t.Setenv("IDPDBG_ALLOWED_HOSTS", "")
+	cfg := `{"profiles":{"spire":{"server":"spire.example:8081","svid":"x","svid_key":"` + dir + `/svid.key","bundle":"x"}}}`
+	if err := os.WriteFile(dir+"/config.json", []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		args M
+		want string
+	}{
+		{M{"profile": "spire", "server": "evil.example:8081"}, "not named in the active profile"},
+		{M{"profile": "spire", "server": "spire.example:9999"}, "not named in the active profile"},
+		{M{"profile": "spire", "server": "https://evil.example"}, "not named"},
+		{M{"profile": "spire", "bundle": "x"}, "caller-supplied bundle"},
+		{M{"profile": "spire", "trust_domain": "evil.test"}, "caller-supplied trust_domain"},
+	} {
+		_, err := runOp(context.Background(), findOp("spire.info"), c.args, false, nil)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%v: %v", c.args, err)
+		}
+	}
+	// The profile's own server gets past the guard (and fails later on the
+	// placeholder SVID).
+	_, err := runOp(context.Background(), findOp("spire.info"), M{"profile": "spire"}, false, nil)
+	if err == nil || strings.Contains(err.Error(), "refusing") {
+		t.Errorf("profile server: %v", err)
+	}
+	if o, a := spireOrigin("[::1]:8081"); o != "spire://::1:8081" || a != "[::1]:8081" {
+		t.Errorf("IPv6: %s %s", o, a)
+	}
+	if !findOp("spire.mint").Mutating {
+		t.Error("spire.mint is marked read-only, yet issues credentials")
+	}
+}

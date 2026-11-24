@@ -34,7 +34,9 @@ as the release notes, and refuses a tag without one.
     checked against the SPIFFE specifications and the server's bundle.
   - `spire entry_create`, `spire entry_delete` and `spire join_token`.
 
-  Tested against SPIRE 1.16 (a server and a join-token agent) in CI, and
+  A client key from a profile is only used with the profile's server, and
+  over MCP the caller cannot replace the bundle or trust domain it is
+  verified with. Tested against SPIRE 1.16 (a server and a join-token agent) in CI, and
   against a fake server in the unit tests.
 - `fido credentials` lists the passkeys a security key stores, by relying
   party (CTAP 2.1 credential management, or the pre-2.1 preview): credential

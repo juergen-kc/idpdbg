@@ -79,8 +79,7 @@ func spireDial(c *Ctx, cs *Checks, out M) (*spireClient, error) {
 	}
 	fail := func(err error) (*spireClient, error) { sc.close(); return nil, err }
 
-	addr := c.Str("server")
-	if addr == "" {
+	if c.Str("server") == "" {
 		path := strings.TrimPrefix(c.Str("socket"), "unix://")
 		if path == "" {
 			path = spireDefaultSocket
@@ -95,11 +94,12 @@ func spireDial(c *Ctx, cs *Checks, out M) (*spireClient, error) {
 		return sc, nil
 	}
 
-	if u, err := url.Parse(addr); err == nil && u.Scheme != "" && u.Host != "" {
-		addr = u.Host
+	origin, addr := spireOrigin(c.Str("server"))
+	if origin == "" {
+		return fail(fmt.Errorf("server %q: write host:port", c.Str("server")))
 	}
-	if _, _, err := net.SplitHostPort(addr); err != nil {
-		addr = net.JoinHostPort(addr, "8081")
+	if err := c.allowDestination("the SPIRE client SVID", origin); err != nil {
+		return fail(err)
 	}
 	var src x509svid.Source
 	var bundles x509bundle.Source
@@ -198,6 +198,24 @@ func listDetail(prefix string, items []string, sep string) string {
 		return ""
 	}
 	return prefix + strings.Join(items, sep)
+}
+
+// spireOrigin is spire://host:port for a server written as host[:port] or
+// as a URL, and the address to dial; "" when it names no host.
+func spireOrigin(s string) (origin, addr string) {
+	s = strings.TrimSpace(s)
+	if u, err := url.Parse(s); err == nil && u.Scheme != "" && u.Host != "" {
+		s = u.Host
+	}
+	host, port, err := net.SplitHostPort(s)
+	if err != nil {
+		host, port = strings.Trim(s, "[]"), "8081"
+	}
+	if host == "" || strings.ContainsAny(host, "/@?#[]") {
+		return "", ""
+	}
+	addr = net.JoinHostPort(host, port)
+	return targetOrigin("spire://" + addr), addr
 }
 
 func spiffeIDOf(id *types.SPIFFEID) string {
@@ -892,8 +910,9 @@ func init() {
 			Run: runSPIREAgents,
 		},
 		&Op{
-			Name:    "spire.mint",
-			Summary: "Have a SPIRE server mint an X509-SVID (for a key idpdbg makes, returned with it) or a JWT-SVID for any SPIFFE ID in its trust domain, and check it against the specifications and the server's bundle. Needs administrator access.",
+			Name:     "spire.mint",
+			Mutating: true, // it issues credentials for any identity
+			Summary:  "Have a SPIRE server mint an X509-SVID (for a key idpdbg makes, returned with it) or a JWT-SVID for any SPIFFE ID in its trust domain, and check it against the specifications and the server's bundle. Needs administrator access.",
 			Params: joinParams(conn, []Param{
 				{Name: "spiffe_id", Type: "string", Required: true, Desc: "The SPIFFE ID to mint for"},
 				{Name: "type", Type: "string", Default: "x509", Enum: []string{"x509", "jwt"}, Desc: "X509-SVID or JWT-SVID"},
