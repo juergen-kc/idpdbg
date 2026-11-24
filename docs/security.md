@@ -90,6 +90,14 @@ explicitly is always used as given.
   be undone. Without `confirm` it is a dry run, and over MCP both `confirm`
   and the key's PIN must be passed in the call: a stored `IDPDBG_PIN` lists
   passkeys but never deletes one.
+- `spire` operations with administrator access can mint an SVID for any
+  identity in the trust domain. Over TCP idpdbg verifies the server against
+  the trust domain's X.509 authorities and accepts only
+  `spiffe://<trust domain>/spire/server`. The client key (`svid_key`) is
+  treated like the other private keys: from a profile it is guarded like a
+  secret, and over MCP TLS verification cannot be switched off while a
+  stored one is in use. Creating and deleting entries and join tokens are marked as
+  changing data, so MCP clients ask before they run.
 - `--report` is a command-line flag, not a tool parameter, so an MCP caller
   can't write an HTML report to disk. The CLI writes it to a new file readable
   only by you (replacing a link rather than writing through it), since it can

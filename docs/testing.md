@@ -96,6 +96,15 @@ is in [development.md](development.md#interop-tests).
   Active Directory's AS-REP nonce, and encrypts the public-key reply with
   3DES although AES was offered. It sends PA_PKINIT_KX only for anonymous
 PKINIT, although RFC 8062 says it should with Diffie-Hellman too.
+- SPIRE 1.16, a server with one agent attested by join token, in CI on
+  every push (`interop_spire_test.go`, set up by `scripts/spire.sh`). It
+  covers the server API over mTLS with an admin X509-SVID (server, CA and
+  bundle state, agents, entries created, listed and deleted, X509- and
+  JWT-SVIDs minted and checked, join tokens), the server refused when its CA
+  is not in the bundle, and a non-admin SVID refused; on Linux also the admin
+  socket with the debug API. A node alias from a join token that no agent
+  has used yet is an entry without an attested parent, which idpdbg warns
+  about.
 - YubiKey 5 (PIV): key generation on the card, certificate import with a
   PIN-protected management key, and PKINIT.
 
@@ -109,5 +118,5 @@ profiles; WS-Trust renew/cancel, proof-of-possession
 keys; the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
 on security keys, setting or changing the PIN, NFC and Bluetooth, and Windows (credential management is tested against an emulated key only);
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,
-PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; the SPIRE Server API; XACML AttributeSelector (XPath) and ALFA;
+PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; for SPIRE, banning or deleting agents, CA rotation and federation changes; XACML AttributeSelector (XPath) and ALFA;
 post-quantum certificates; indirect CRLs.

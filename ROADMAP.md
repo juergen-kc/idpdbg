@@ -24,7 +24,6 @@ server-supplied URLs held to public addresses. The
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| SPIRE Server API | The server's administration API, next to the Workload API | L | SPIRE server container in CI |
 | FIDO over NFC | Security keys through an NFC reader, over the existing PC/SC support | S–M | Real keys by hand (needs a reader) |
 | OpenPGP card signing and decryption | Card operations that need the PIN; no key generation | M | Emulated card in the unit tests; real cards by hand |
 
@@ -38,6 +37,8 @@ Legacy or niche: planned when someone needs them.
   challenge (such as SPAKE)
 - XACML attribute selectors (XPath) and ALFA
 - Indirect CRLs
+- SPIRE: banning and deleting agents, CA rotation (prepare, activate,
+  taint, revoke), and changing federation relationships and bundles
 - Post-quantum certificates: decoding first, once Go's standard library
   supports ML-DSA in certificates
 - Security keys on Windows, through Windows' own WebAuthn API (Windows lets

@@ -36,6 +36,7 @@ var groups = []struct {
 	{"oath", "OATH one-time passwords", nil},
 	{"yubico", "Yubico OTP", nil},
 	{"spiffe", "SPIFFE workload identity", nil},
+	{"spire", "SPIRE Server API", []string{"info", "bundles", "entries", "agents", "mint", "entry_create", "entry_delete", "join_token"}},
 	{"ssf", "Shared Signals (CAEP, RISC)", nil},
 	{"gnap", "GNAP", nil},
 	{"vci", "OpenID for Verifiable Credential Issuance", nil},

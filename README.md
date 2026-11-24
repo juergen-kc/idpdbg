@@ -141,6 +141,7 @@ What each group covers:
 | [`card`](docs/reference/card.md) | Read cards and YubiKeys over PC/SC; decode APDUs, PIV and OpenPGP objects; generate a PIV key on the card and import its certificate |
 | [`oath`](docs/reference/oath.md), [`yubico`](docs/reference/yubico.md) | HOTP and TOTP codes; Yubico OTP decoding and checks |
 | [`spiffe`](docs/reference/spiffe.md) | SPIFFE IDs, X509- and JWT-SVIDs, trust bundles, the Workload API |
+| [`spire`](docs/reference/spire.md) | The SPIRE Server API over the admin socket or mTLS: server, CA and bundle state, entries, agents, federation; minting checked SVIDs; creating and deleting entries and join tokens |
 | [`ssf`](docs/reference/ssf.md) | Shared Signals: discovery, streams, poll and push delivery, Security Event Token checks for CAEP and RISC |
 | [`gnap`](docs/reference/gnap.md) | Grants with HTTP message signatures, interaction, continuation, rotation, revocation |
 | [`vci`](docs/reference/vci.md), [`vp`](docs/reference/vp.md) | OID4VCI pre-authorized issuance as a wallet; OID4VP requests and selective-disclosure presentations |

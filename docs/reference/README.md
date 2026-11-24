@@ -27,6 +27,7 @@ Every operation runs as `idpdbg <group> <operation> [--param value ...]` and as 
 | [oath](oath.md) — OATH one-time passwords | [`code`](oath.md#oath-code) |
 | [yubico](yubico.md) — Yubico OTP | [`otp`](yubico.md#yubico-otp) |
 | [spiffe](spiffe.md) — SPIFFE workload identity | [`id`](spiffe.md#spiffe-id), [`svid`](spiffe.md#spiffe-svid), [`bundle`](spiffe.md#spiffe-bundle), [`fetch`](spiffe.md#spiffe-fetch) |
+| [spire](spire.md) — SPIRE Server API | [`info`](spire.md#spire-info), [`bundles`](spire.md#spire-bundles), [`entries`](spire.md#spire-entries), [`agents`](spire.md#spire-agents), [`mint`](spire.md#spire-mint), [`entry_create`](spire.md#spire-entry_create), [`entry_delete`](spire.md#spire-entry_delete), [`join_token`](spire.md#spire-join_token) |
 | [ssf](ssf.md) — Shared Signals (CAEP, RISC) | [`discover`](ssf.md#ssf-discover), [`stream`](ssf.md#ssf-stream), [`poll`](ssf.md#ssf-poll), [`receive`](ssf.md#ssf-receive), [`set`](ssf.md#ssf-set) |
 | [gnap](gnap.md) — GNAP | [`grant`](gnap.md#gnap-grant), [`continue`](gnap.md#gnap-continue), [`rotate`](gnap.md#gnap-rotate), [`revoke`](gnap.md#gnap-revoke) |
 | [vci](vci.md) — OpenID for Verifiable Credential Issuance | [`metadata`](vci.md#vci-metadata), [`issue`](vci.md#vci-issue) |
@@ -94,6 +95,9 @@ They change state at the remote system (or, for the `card` writes, on the card) 
 - [`fido credential_delete`](fido.md#fido-credential_delete) (`fido_credential_delete`)
 - [`card piv_generate`](card.md#card-piv_generate) (`card_piv_generate`)
 - [`card piv_import`](card.md#card-piv_import) (`card_piv_import`)
+- [`spire entry_create`](spire.md#spire-entry_create) (`spire_entry_create`)
+- [`spire entry_delete`](spire.md#spire-entry_delete) (`spire_entry_delete`)
+- [`spire join_token`](spire.md#spire-join_token) (`spire_join_token`)
 - [`ssf stream`](ssf.md#ssf-stream) (`ssf_stream`)
 - [`ssf poll`](ssf.md#ssf-poll) (`ssf_poll`)
 - [`ssf receive`](ssf.md#ssf-receive) (`ssf_receive`)

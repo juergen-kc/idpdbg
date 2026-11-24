@@ -15,6 +15,27 @@ as the release notes, and refuses a tag without one.
 ## [Unreleased]
 
 ### Added
+- `spire` commands for the SPIRE Server API, over the admin socket or over
+  TCP with mTLS (an X509-SVID in the server's `admin_ids`, from files or a
+  Workload API), the server verified as `spiffe://<td>/spire/server`:
+  - `spire info`: health, uptime, counts, the server's SVID chain and its
+    active, prepared and old X.509 and JWT authorities, and its bundle.
+  - `spire bundles`: its bundle and the federated ones, with tainted and
+    expired authorities flagged, and its federation relationships (an
+    endpoint that is not https, or a relationship without a fetched
+    bundle, fails).
+  - `spire entries`: by ID, SPIFFE ID, parent, selectors or hint, checked
+    for entries outside the trust domain, parents that are neither the
+    server, an agent nor another entry, expired entries, X509-SVID TTLs
+    above 24 hours and admin entries.
+  - `spire agents`: attestation type, selectors, SVID expiry, banned,
+    re-attestation, version; expired agent SVIDs are flagged.
+  - `spire mint`: an X509-SVID (for a key idpdbg makes) or a JWT-SVID,
+    checked against the SPIFFE specifications and the server's bundle.
+  - `spire entry_create`, `spire entry_delete` and `spire join_token`.
+
+  Tested against SPIRE 1.16 (a server and a join-token agent) in CI, and
+  against a fake server in the unit tests.
 - `fido credentials` lists the passkeys a security key stores, by relying
   party (CTAP 2.1 credential management, or the pre-2.1 preview): credential
   ID, user handle and name, public key and credProtect level, and how many

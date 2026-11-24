@@ -143,3 +143,23 @@ jobs:
       - name: KDC log
         if: failure()
         run: docker logs idpdbg-mitkdc 2>&1 | tail -200
+
+  interop-spire:
+    name: interop with a SPIRE server
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Start a SPIRE server and agent
+        run: scripts/spire.sh
+      - name: Run idpdbg against it
+        run: go test -tags interop -count=1 -run SPIRE -v .
+      - name: SPIRE logs
+        if: failure()
+        run: |
+          docker logs idpdbg-spire-server 2>&1 | tail -200
+          docker logs idpdbg-spire-agent 2>&1 | tail -100

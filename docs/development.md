@@ -24,8 +24,8 @@ go test ./...
 ## Interop tests
 
 Interop tests run idpdbg against a real Keycloak, a Samba AD domain
-controller, an MIT Kerberos KDC and a SCIM server (in CI on every push, and
-locally with Docker):
+controller, an MIT Kerberos KDC, a SCIM server and a SPIRE server (in CI on
+every push, and locally with Docker):
 
 ```bash
 scripts/keycloak.sh
@@ -41,6 +41,10 @@ scripts/mitkdc.sh
 
 ```bash
 scripts/scim.sh
+```
+
+```bash
+scripts/spire.sh
 ```
 
 ```bash
@@ -113,6 +117,6 @@ behind, so run it after changing an operation.
 | `ocsp.go`, `crl.go` | OCSP requests and response validation; CRL download and validation |
 | `crl_ldap.go` | CRLs from ldap(s) distribution points; delta CRLs |
 | `pki.go`, `tlsprobe.go` | X.509 decoding, chain verification, a test CA; the TLS probe |
-| `*_test.go` | Tests: mock OpenID providers (one strict about PAR/JAR/DPoP/private_key_jwt), mock SAML IdPs for SLO and artifacts, an in-process LDAP server, a mock SCIM server, an emulated PIV/OpenPGP token, an emulated CTAP2/U2F security key, an MCP client; `IDPDBG_HW_TEST=1` also runs WebAuthn with a real key (touch needed); `interop_*_test.go` (build tag `interop`) run against Keycloak (with a scripted browser), a Samba AD domain controller, an MIT KDC and i2scim |
+| `*_test.go` | Tests: mock OpenID providers (one strict about PAR/JAR/DPoP/private_key_jwt), mock SAML IdPs for SLO and artifacts, an in-process LDAP server, a mock SCIM server, an emulated PIV/OpenPGP token, an emulated CTAP2/U2F security key, an MCP client; `IDPDBG_HW_TEST=1` also runs WebAuthn with a real key (touch needed); `interop_*_test.go` (build tag `interop`) run against Keycloak (with a scripted browser), a Samba AD domain controller, an MIT KDC, i2scim and a SPIRE server; the SPIRE unit tests use an in-process fake SPIRE server |
 | `mcp.go` | MCP stdio server |
 | `main.go`, `docs.go` | CLI; the generated command reference in `docs/reference` |

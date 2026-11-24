@@ -450,7 +450,7 @@ var notDestinations = map[string]bool{
 // credentialParams hold private keys. They are not Secret (they carry no
 // environment fallback and may be file paths), but whatever they sign is a
 // credential, so when they come from a profile they are guarded like secrets.
-var credentialParams = map[string]bool{"client_key": true, "mtls_key": true, "dpop_key": true, "sp_key": true, "keytab": true, "armor_keytab": true, "pkinit_key": true, "holder_key": true}
+var credentialParams = map[string]bool{"client_key": true, "mtls_key": true, "dpop_key": true, "sp_key": true, "keytab": true, "armor_keytab": true, "pkinit_key": true, "holder_key": true, "svid_key": true}
 
 // guardStoredSecrets stops a stored secret (profile or environment) from being
 // sent anywhere the caller picked. A profile's secrets only go to the exact
