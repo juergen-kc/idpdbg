@@ -249,6 +249,11 @@ func TestOpenPGPCard(t *testing.T) {
 	}
 	wantStatus(t, res, "decryption key", "info")
 	wantStatus(t, run(t, "card.openpgp", M{"data": ard(4096, []byte{0, 127, 127, 127, 0, 0, 3})}, nil), "PW1 (user PIN) retries", "fail")
+	yk := run(t, "card.openpgp", M{"data": ard(2048, []byte{0xFF, 127, 127, 127, 3, 0, 3})}, nil) // as a YubiKey 5.1 sends it
+	wantStatus(t, yk, "PW1 signature policy byte", "info")
+	if yk["pin_status"].(M)["pw1_valid_for_multiple_signatures"] != true {
+		t.Errorf("FF read as one signature per PIN: %v", yk["pin_status"])
+	}
 	wantStatus(t, run(t, "card.openpgp", M{"data": ard(4096, []byte{0, 127, 127, 127, 3, 0, 1})}, nil), "PW3 (admin PIN) retries", "warn")
 	wantStatus(t, run(t, "card.openpgp", M{"data": ard(1024, []byte{0, 127, 127, 127, 3, 0, 3})}, nil), "signature: key size", "warn")
 }

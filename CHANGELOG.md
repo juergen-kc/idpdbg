@@ -30,7 +30,13 @@ as the release notes, and refuses a tag without one.
   is only accepted from the CLI: over MCP the card signs and decrypts only
   idpdbg's own test values and the signature is not returned, so the card
   cannot be made to sign or decrypt anything else. Tested against an
-  emulated card.
+  emulated card and a YubiKey 5.1 (OpenPGP 2.1, RSA-2048 keys).
+
+### Fixed
+- `card read` and `card openpgp` read the PW1 signature policy byte as
+  GnuPG does: any non-zero value means one PIN entry allows several
+  signatures. A YubiKey 5.1 sends `FF` (the specification has `00` or
+  `01`), which was reported as a PIN for every signature; it is now noted.
 
 ## [0.29.0] - 2026-11-24
 

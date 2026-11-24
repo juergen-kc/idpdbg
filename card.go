@@ -605,7 +605,13 @@ func decodeOpenPGP(b []byte) (M, error) {
 	out["keys"] = keys
 	if pw := findTLV(ts, 0xC4); pw != nil && len(pw.Value) >= 7 {
 		v := pw.Value
-		out["pin_status"] = M{"pw1_valid_for_multiple_signatures": v[0] == 1, "pw1_max_length": v[1], "rc_max_length": v[2], "pw3_max_length": v[3],
+		// 00: PW1 is needed for every signature; 01: one VERIFY allows
+		// several. Some cards (YubiKey 5.1) send FF; GnuPG reads any
+		// non-zero value as "several", and so does idpdbg.
+		if v[0] > 1 {
+			cs.add("PW1 signature policy byte", "info", fmt.Sprintf("%02X, where the specification has 00 or 01: read as valid for several signatures, as GnuPG does", v[0]), "OpenPGP card 3.4 §4.4.1")
+		}
+		out["pin_status"] = M{"pw1_valid_for_multiple_signatures": v[0] != 0, "pw1_max_length": v[1], "rc_max_length": v[2], "pw3_max_length": v[3],
 			"pw1_tries_left": v[4], "reset_code_tries_left": v[5], "pw3_tries_left": v[6]}
 		for _, p := range []struct {
 			name string
