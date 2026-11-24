@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-11-24
+
 ### Changed
 - Dependencies: golang.org/x/crypto 0.59.0, golang.org/x/net 0.63.0,
   google.golang.org/grpc 1.85.0.
@@ -763,7 +765,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.34.1...HEAD
+[0.34.1]: https://github.com/juergen-kc/idpdbg/compare/v0.34.0...v0.34.1
 [0.34.0]: https://github.com/juergen-kc/idpdbg/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/juergen-kc/idpdbg/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/juergen-kc/idpdbg/compare/v0.31.0...v0.32.0
