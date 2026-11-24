@@ -20,6 +20,13 @@ as the release notes, and refuses a tag without one.
   device key, or the device MAC with the reader's ephemeral key
   (`--reader-key`, derived as EMacKey). Tested with the ISO/IEC 18013-5
   Annex D session.
+- `vp present` presents mdocs (mso_mdoc) too: it picks the DCQL query for
+  the docType, sends only the requested data elements, and signs a
+  DeviceResponse with the device key over the OID4VP SessionTranscript
+  (OpenID4VPHandover with client_id, nonce, response URI and, for
+  direct_post.jwt, the verifier's encryption key thumbprint), which it
+  verifies itself before sending. Tested against a mock verifier; no real
+  OID4VP verifier runs in CI for mdoc yet.
 
 ## [0.27.0] - 2026-11-23
 

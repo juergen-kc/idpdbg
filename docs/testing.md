@@ -106,8 +106,7 @@ order.
 
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
 profiles; WS-Trust renew/cancel, proof-of-possession
-keys; mdoc device authentication and mdoc presentations over OID4VP, and
-the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
+keys; the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
 on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,
 PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; the SPIRE Server API; XACML AttributeSelector (XPath) and ALFA;

@@ -8,7 +8,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -185,6 +187,7 @@ type mockVerifier struct {
 	issuer   string
 	mu       sync.Mutex
 	received []M
+	iacaPEM  string // trusted for mdoc presentations
 }
 
 func newMockVerifier(t *testing.T, issuer string) *mockVerifier {
@@ -200,6 +203,8 @@ func newMockVerifier(t *testing.T, issuer string) *mockVerifier {
 	v.base = strings.Replace(v.URL, "127.0.0.1", "localhost", 1)
 	mux.HandleFunc("/request/", func(w http.ResponseWriter, r *http.Request) {
 		mode := strings.TrimPrefix(r.URL.Path, "/request/")
+		mdoc := strings.HasPrefix(mode, "mdoc-")
+		mode = strings.TrimPrefix(mode, "mdoc-")
 		responseURI := v.base + "/response"
 		if mode == "elsewhere" {
 			responseURI, mode = "http://attacker.example/collect", "direct_post"
@@ -208,6 +213,10 @@ func newMockVerifier(t *testing.T, issuer string) *mockVerifier {
 			"nonce": "n-123", "state": "st-1", "aud": "https://self-issued.me/v2", "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Minute).Unix(),
 			"dcql_query": M{"credentials": []M{{"id": "pid", "format": "dc+sd-jwt", "meta": M{"vct_values": []string{"urn:eudi:pid:1"}},
 				"claims": []M{{"path": []any{"given_name"}}, {"path": []any{"nationalities", nil}}}}}}}
+		if mdoc {
+			claims["dcql_query"] = M{"credentials": []M{{"id": "mdl", "format": "mso_mdoc", "meta": M{"doctype_value": "org.iso.18013.5.1.mDL"},
+				"claims": []M{{"path": []any{"org.iso.18013.5.1", "family_name"}}, {"path": []any{"org.iso.18013.5.1", "age_over_18"}, "intent_to_retain": false}}}}}
+		}
 		if mode == "direct_post.jwt" {
 			ek, _ := publicJWK(v.encKey.Public())
 			ek["kid"], ek["use"] = "enc-1", "enc"
@@ -233,6 +242,26 @@ func newMockVerifier(t *testing.T, issuer string) *mockVerifier {
 		}
 		var tok map[string][]string
 		json.Unmarshal([]byte(vpToken), &tok)
+		if len(tok["mdl"]) == 1 { // an mdoc: rebuild the OID4VP session and verify the device signature over it
+			var thumb []byte
+			if r.PostForm.Get("response") != "" {
+				ek, _ := publicJWK(v.encKey.Public())
+				thumb, _ = base64.RawURLEncoding.DecodeString(jwkThumbprint(ek))
+			}
+			st := oid4vpSessionTranscript("x509_san_dns:localhost", "n-123", thumb, v.base+"/response")
+			res, err := runOp(r.Context(), findOp("mdoc.decode"), M{"credential": tok["mdl"][0], "session_transcript": hex.EncodeToString(st),
+				"trust_anchors": v.iacaPEM, "doc_type": "org.iso.18013.5.1.mDL"}, false, nil)
+			v.mu.Lock()
+			v.received = append(v.received, res)
+			v.mu.Unlock()
+			if err != nil || hasFailure(res) {
+				http.Error(w, "mdoc presentation rejected", 400)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"redirect_uri":"https://verifier.example/done"}`)
+			return
+		}
 		if len(tok["pid"]) != 1 {
 			http.Error(w, "no pid presentation", 400)
 			return
@@ -351,6 +380,41 @@ func TestVerifiableCredentials(t *testing.T) {
 			if got["given_name"] != "Erika" || got["family_name"] != nil || got["birthdate"] != nil {
 				t.Errorf("the verifier saw %v", got)
 			}
+		})
+	}
+
+	// An mdoc from the issuer, presented over OID4VP with only the
+	// requested elements and a device signature over the session.
+	mdl := run(t, "vci.issue", M{"offer": is.offer(), "tx_code": "1234", "configuration_id": "mdl", "allow_private_urls": true}, nil)
+	mdlCred := mdl["credentials"].([]string)[0]
+	mk, _ := json.Marshal(mdl["holder_key"])
+	mdlHolder := string(mk)
+	iacaPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: is.mdoc.iaca.Raw}))
+	for _, mode := range []string{"direct_post", "direct_post.jwt"} {
+		t.Run("present an mdoc by "+mode, func(t *testing.T) {
+			v := newMockVerifier(t, is.URL)
+			v.iacaPEM = iacaPEM
+			req := "openid4vp://?client_id=" + url.QueryEscape("x509_san_dns:localhost") + "&request_uri=" + url.QueryEscape(v.base+"/request/mdoc-"+mode)
+			args := M{"allow_private_urls": true, "request": req, "credential": mdlCred, "holder_key": mdlHolder, "trust_anchors": certPEM(v.cert)}
+			res := run(t, "vp.present", args, nil)
+			noFailures(t, res)
+			for _, n := range []string{"a DCQL credential query matches", "holder_key is the MSO's device key", "device signature over the OID4VP session",
+				"the DeviceResponse verifies", "verifier accepted the presentation"} {
+				wantStatus(t, res, n, "pass")
+			}
+			if strings.Join(res["disclosed"].([]string), ",") != "org.iso.18013.5.1/age_over_18,org.iso.18013.5.1/family_name" ||
+				strings.Join(res["withheld"].([]string), ",") != "org.iso.18013.5.1/birth_date,org.iso.18013.5.1/given_name" {
+				t.Errorf("disclosed %v, withheld %v", res["disclosed"], res["withheld"])
+			}
+			got := v.received[len(v.received)-1]
+			wantStatus(t, got, "device signature", "pass")
+			claims := got["documents"].([]M)[0]["namespaces"].(M)["org.iso.18013.5.1"].(M)
+			if claims["family_name"] != "Mustermann" || claims["given_name"] != nil || claims["birth_date"] != nil {
+				t.Errorf("the verifier saw %v", claims)
+			}
+			// Another key is not the device key.
+			args["holder_key"] = holder
+			wantStatus(t, run(t, "vp.present", args, nil), "holder_key is the MSO's device key", "fail")
 		})
 	}
 

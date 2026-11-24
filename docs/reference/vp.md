@@ -19,15 +19,15 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## vp present
 
-Answer an OID4VP request with an SD-JWT VC, as a wallet: check the request, pick the credential query it matches, disclose only the requested claims, bind with a KB-JWT (aud = client_id, the request's nonce) and send the vp_token by direct_post, or encrypted with direct_post.jwt. Sends personal data to the verifier.
+Answer an OID4VP request as a wallet, with an SD-JWT VC or an mdoc: check the request, pick the credential query it matches, disclose only the requested claims or data elements, and bind the presentation to this verifier and nonce: a KB-JWT for an SD-JWT VC, a device signature over the OID4VP SessionTranscript in a DeviceResponse for an mdoc (checked locally as the verifier will). Sends the vp_token by direct_post, or encrypted with direct_post.jwt. Sends personal data to the verifier.
 
 MCP tool: `vp_present`. **Changes data at the remote system.**
 
 | Parameter | Type | Description |
 |---|---|---|
 | `--request` | string | openid4vp:// (or https) request URL, or a request object JWT. **Required.** CLI: `@path` reads a file, `-` reads stdin. |
-| `--credential` | string | The issued SD-JWT VC (issuer-jwt~disclosures~), e.g. from vci issue. **Required.** CLI: `@path` reads a file, `-` reads stdin. |
-| `--holder-key` | string | The holder private key the credential is bound to (PEM or JWK). May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
+| `--credential` | string | The issued credential, e.g. from vci issue: an SD-JWT VC (issuer-jwt~disclosures~) or an mdoc (IssuerSigned, base64url). **Required.** CLI: `@path` reads a file, `-` reads stdin. |
+| `--holder-key` | string | The holder private key the credential is bound to (PEM or JWK): the cnf key of an SD-JWT VC, the device key of an mdoc. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--trust-anchors` | string | PEM roots for verifier certificates. May be a file path (CLI or profile only). |
 | `--force` | bool | Send even if the request failed checks. |
 

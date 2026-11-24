@@ -806,13 +806,29 @@ func runVPPresent(c *Ctx) (M, error) {
 		return out, nil
 	}
 	cred := strings.TrimSpace(c.Str("credential"))
+	var vpToken []byte
+	if isMdocCredential(cred) {
+		vpToken, err = presentMdoc(c, &cs, out, r, cred)
+	} else {
+		vpToken, err = presentSDJWT(c, &cs, out, r, cred)
+	}
+	if err != nil || vpToken == nil {
+		return out, err
+	}
+	out["vp_token"] = json.RawMessage(vpToken)
+	return out, vpRespond(c, &cs, out, r, vpToken)
+}
+
+// presentSDJWT discloses what the DCQL query asks of an SD-JWT VC and adds
+// the key binding JWT. A nil vp_token means the checks stopped it.
+func presentSDJWT(c *Ctx, cs *Checks, out M, r *vpRequest, cred string) ([]byte, error) {
 	if !strings.HasSuffix(cred, "~") {
 		cred = cred[:strings.LastIndex(cred, "~")+1] // drop any old KB-JWT
 	}
 	parts := strings.Split(cred, "~")
 	ip, err := parseJWT(parts[0])
 	if err != nil || ip.Claims == nil {
-		return out, errors.New("credential must be an issuer-signed SD-JWT VC (jwt~disclosure~...~)")
+		return nil, errors.New("credential must be an issuer-signed SD-JWT VC (jwt~disclosure~...~)")
 	}
 	alg := "sha-256"
 	if a := str(ip.Claims["_sd_alg"]); a != "" {
@@ -847,7 +863,7 @@ func runVPPresent(c *Ctx) (M, error) {
 		}
 	}
 	if !cs.ok(query != nil, "a DCQL credential query matches this credential", "vct="+str(ip.Claims["vct"]), vpRef+" §6") {
-		return out, nil
+		return nil, nil
 	}
 	var paths []string
 	if cl, ok := query["claims"].([]any); ok {
@@ -874,7 +890,7 @@ func runVPPresent(c *Ctx) (M, error) {
 		missing = still
 	}
 	if !cs.ok(len(missing) == 0, "every requested claim is available", strings.Join(missing, ", "), vpRef+" §6.4") {
-		return out, nil
+		return nil, nil
 	}
 	var sent, withheld []string
 	presentation := parts[0] + "~"
@@ -894,28 +910,48 @@ func runVPPresent(c *Ctx) (M, error) {
 	// Key binding.
 	hk, _, err := holderKey(c)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	if c.Str("holder_key") == "" {
-		return out, errors.New("holder_key is required: the key the credential is bound to")
+		return nil, errors.New("holder_key is required: the key the credential is bound to")
 	}
 	hj, _ := publicJWK(hk.Public())
 	cnf, _ := ip.Claims["cnf"].(map[string]any)
 	cj, _ := cnf["jwk"].(map[string]any)
 	if !cs.ok(cj != nil && jwkThumbprint(cj) == jwkThumbprint(hj), "holder_key is the credential's cnf key", "", "RFC 9901 §4.3") {
-		return out, nil
+		return nil, nil
 	}
 	salg, _ := signerAlg(hk, "")
 	kb, err := signJWS(hk, salg, M{"typ": "kb+jwt"}, M{"iat": time.Now().Unix(), "aud": r.ClientID, "nonce": str(r.Claims["nonce"]), "sd_hash": sdDigest(alg, presentation)})
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	presentation += kb
 	qid := str(query["id"])
 	vpToken, _ := json.Marshal(M{qid: []string{presentation}})
-	out["vp_token"] = json.RawMessage(vpToken)
+	return vpToken, nil
 
-	// Response.
+}
+
+// vpEncryptionKey is the verifier's key for an encrypted response
+// (direct_post.jwt), from client_metadata.jwks.
+func vpEncryptionKey(r *vpRequest) M {
+	cm, _ := r.Claims["client_metadata"].(map[string]any)
+	keys := jwksKeys(cm["jwks"])
+	if len(keys) == 0 {
+		return nil
+	}
+	ek := keys[0]
+	for _, k := range keys {
+		if str(k["use"]) == "enc" {
+			ek = k
+		}
+	}
+	return ek
+}
+
+// vpRespond sends the vp_token as the response mode asks.
+func vpRespond(c *Ctx, cs *Checks, out M, r *vpRequest, vpToken []byte) error {
 	mode, ru := str(r.Claims["response_mode"]), str(r.Claims["response_uri"])
 	form := url.Values{}
 	switch mode {
@@ -926,15 +962,9 @@ func runVPPresent(c *Ctx) (M, error) {
 		}
 	case "direct_post.jwt":
 		cm, _ := r.Claims["client_metadata"].(map[string]any)
-		keys := jwksKeys(cm["jwks"])
-		if !cs.ok(len(keys) > 0, "verifier encryption key in client_metadata.jwks", "", vpRef+" §8.3") {
-			return out, nil
-		}
-		ek := keys[0]
-		for _, k := range keys {
-			if str(k["use"]) == "enc" {
-				ek = k
-			}
+		ek := vpEncryptionKey(r)
+		if !cs.ok(ek != nil, "verifier encryption key in client_metadata.jwks", "", vpRef+" §8.3") {
+			return nil
 		}
 		enc := "A128GCM"
 		if l, ok := cm["encrypted_response_enc_values_supported"].([]any); ok && len(l) > 0 {
@@ -944,27 +974,27 @@ func runVPPresent(c *Ctx) (M, error) {
 		payload, _ := json.Marshal(M{"vp_token": json.RawMessage(vpToken), "state": r.Claims["state"]})
 		jw, err := runJWEEncrypt(c.sub(M{"alg": "ECDH-ES", "enc": enc, "key": string(kj), "payload": string(payload), "kid": str(ek["kid"]), "iat_now": false}))
 		if err != nil {
-			return out, fmt.Errorf("encrypting the response: %w", err)
+			return fmt.Errorf("encrypting the response: %w", err)
 		}
 		form.Set("response", str(jw["token"]))
 		cs.add("response encrypted", "pass", "ECDH-ES/"+enc+" to verifier key "+str(ek["kid"]), vpRef+" §8.3")
 	default:
 		cs.add("response delivery", "info", "response_mode "+mode+" returns through the browser; the vp_token is in this result for you to deliver", vpRef+" §8")
-		return out, nil
+		return nil
 	}
 	if err := c.allowDestination("the presentation", ru); err != nil {
-		return out, err
+		return err
 	}
 	res, err := c.postForm(ru, form, nil)
 	if err != nil {
-		return out, err
+		return err
 	}
 	out["verifier_status"], out["verifier_response"] = res.Status, res.payload()
 	cs.ok(res.Status == 200, "verifier accepted the presentation", fmt.Sprintf("HTTP %d %s", res.Status, strings.TrimSpace(string(res.Body))), vpRef+" §8.2")
 	if rb := res.obj(); rb != nil && str(rb["redirect_uri"]) != "" {
 		out["redirect_uri"] = rb["redirect_uri"]
 	}
-	return out, nil
+	return nil
 }
 
 func init() {
@@ -1007,11 +1037,12 @@ func init() {
 		&Op{
 			Name:     "vp.present",
 			Mutating: true,
-			Summary:  "Answer an OID4VP request with an SD-JWT VC, as a wallet: check the request, pick the credential query it matches, disclose only the requested claims, bind with a KB-JWT (aud = client_id, the request's nonce) and send the vp_token by direct_post, or encrypted with direct_post.jwt. Sends personal data to the verifier.",
+			Summary: "Answer an OID4VP request as a wallet, with an SD-JWT VC or an mdoc: check the request, pick the credential query it matches, disclose only the requested claims or data elements, and bind the presentation to this verifier and nonce: a KB-JWT for an SD-JWT VC, a device signature over the OID4VP SessionTranscript in a DeviceResponse for an mdoc (checked locally as the verifier will). " +
+				"Sends the vp_token by direct_post, or encrypted with direct_post.jwt. Sends personal data to the verifier.",
 			Params: []Param{
 				{Name: "request", Type: "string", Required: true, File: true, Desc: "openid4vp:// (or https) request URL, or a request object JWT"},
-				{Name: "credential", Type: "string", Required: true, File: true, Desc: "The issued SD-JWT VC (issuer-jwt~disclosures~), e.g. from vci issue"},
-				{Name: "holder_key", Type: "string", Path: true, Explicit: true, Desc: "The holder private key the credential is bound to (PEM or JWK)"},
+				{Name: "credential", Type: "string", Required: true, File: true, Desc: "The issued credential, e.g. from vci issue: an SD-JWT VC (issuer-jwt~disclosures~) or an mdoc (IssuerSigned, base64url)"},
+				{Name: "holder_key", Type: "string", Path: true, Explicit: true, Desc: "The holder private key the credential is bound to (PEM or JWK): the cnf key of an SD-JWT VC, the device key of an mdoc"},
 				{Name: "trust_anchors", Type: "string", Path: true, Desc: "PEM roots for verifier certificates"},
 				{Name: "force", Type: "bool", Desc: "Send even if the request failed checks"}},
 			Run: runVPPresent,
