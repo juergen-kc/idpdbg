@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-24
+
 ### Added
 - FIDO security keys on an NFC (or any PC/SC) reader: `--device nfc`, or
   `nfc:<part of the reader name>`, for `fido info`, `fido credentials`,
@@ -702,7 +704,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/juergen-kc/idpdbg/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/juergen-kc/idpdbg/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/juergen-kc/idpdbg/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/juergen-kc/idpdbg/compare/v0.27.0...v0.28.0
