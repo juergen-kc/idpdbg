@@ -100,6 +100,11 @@ explicitly is always used as given.
   replaced while a stored one is in use. Minting, and creating and deleting
   entries and join tokens, are marked as changing data, so MCP clients ask
   before they run.
+- Over MCP an OpenPGP card is never a signing or decryption oracle:
+  `card.openpgp_sign` and `card.openpgp_decrypt` refuse a caller's message
+  or ciphertext and only use idpdbg's own test values, and the test
+  signature is not returned. From the CLI any data may be signed or
+  decrypted.
 - `--report` is a command-line flag, not a tool parameter, so an MCP caller
   can't write an HTML report to disk. The CLI writes it to a new file readable
   only by you (replacing a link rather than writing through it), since it can

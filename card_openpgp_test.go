@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -253,8 +254,11 @@ func TestOpenPGPCardRSA(t *testing.T) {
 	}
 	useFakePGP(t, f)
 
-	res := run(t, "card.openpgp_sign", M{"openpgp_pin": "123456", "message": "hello"}, nil)
+	res := runCLI(t, "card.openpgp_sign", M{"openpgp_pin": "123456", "message": "hello"})
 	noFailures(t, res)
+	if str(res["signature"]) == "" {
+		t.Error("no signature from the CLI")
+	}
 	wantStatus(t, res, "public key matches the stored fingerprint", "pass")
 	wantStatus(t, res, "signature verifies with the slot's public key", "pass")
 	wantStatus(t, res, "signature counter went up by one", "pass")
@@ -272,9 +276,24 @@ func TestOpenPGPCardRSA(t *testing.T) {
 	noFailures(t, dec)
 	wantStatus(t, dec, "the card's answer is the value idpdbg encrypted", "pass")
 	ct, _ := rsa.EncryptPKCS1v15(rand.Reader, &keys["decryption"].(*rsa.PrivateKey).PublicKey, []byte("session key"))
-	given := run(t, "card.openpgp_decrypt", M{"openpgp_pin": "123456", "ciphertext": hex.EncodeToString(ct)}, nil)
+	given := runCLI(t, "card.openpgp_decrypt", M{"openpgp_pin": "123456", "ciphertext": hex.EncodeToString(ct)})
 	if given["plaintext"] != hex.EncodeToString([]byte("session key")) {
 		t.Errorf("plaintext: %v", given)
+	}
+	// Over MCP the card is no oracle: caller data is refused, and the test
+	// signature is not handed out.
+	n := len(f.ops)
+	for op, a := range map[string]M{"card.openpgp_sign": {"message": "a commit to sign"}, "card.openpgp_decrypt": {"ciphertext": hex.EncodeToString(ct)}} {
+		a["openpgp_pin"] = "123456"
+		if _, err := runOp(context.Background(), findOp(op), a, false, nil); err == nil || !strings.Contains(err.Error(), "only accepted from the CLI") {
+			t.Errorf("%s over MCP: %v", op, err)
+		}
+	}
+	if len(f.ops) != n {
+		t.Errorf("the card was used for refused calls: % X", f.ops[n:])
+	}
+	if mcp, err := runOp(context.Background(), findOp("card.openpgp_sign"), M{"openpgp_pin": "123456"}, false, nil); err != nil || mcp["signature"] != nil {
+		t.Errorf("MCP self-test: %v, signature %v", err, mcp["signature"])
 	}
 	if !bytes.Contains(f.ops, []byte{0x2A}) {
 		t.Error("no PSO")
@@ -357,4 +376,13 @@ func TestOpenPGPCardECC(t *testing.T) {
 	if _, err := tryOp(t, "card.openpgp_sign", M{"openpgp_pin": "123456", "slot": "decryption"}); err == nil {
 		t.Error("signing with the decryption slot")
 	}
+}
+
+func runCLI(t *testing.T, name string, args M) M {
+	t.Helper()
+	res, err := runOp(context.Background(), findOp(name), args, true, nil)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	return res
 }

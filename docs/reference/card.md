@@ -67,7 +67,7 @@ MCP tool: `card_openpgp_sign`.
 | `--reader` | string | Reader name or part of it; default the first reader. |
 | `--openpgp-pin` | string | The user PIN (PW1); else IDPDBG_OPENPGP_PIN or a no-echo prompt. Never tried with fewer than 2 attempts left, and never retried. Secret: falls back to `IDPDBG_OPENPGP_PIN`, redacted in traces. |
 | `--slot` | string | Which key. Default `signature`. One of `signature`, `authentication`. |
-| `--message` | string | What to sign (default: a test string). CLI: `@path` reads a file, `-` reads stdin. |
+| `--message` | string | What to sign (default: a test string). CLI only: over MCP the card signs only idpdbg's test string, and the signature is not returned. CLI: `@path` reads a file, `-` reads stdin. |
 | `--hash` | string | Hash of the message the card signs. Default `sha256`. One of `sha256`, `sha384`, `sha512`. |
 
 Plus the [common parameters](README.md#common-parameters).
@@ -82,7 +82,7 @@ MCP tool: `card_openpgp_decrypt`.
 |---|---|---|
 | `--reader` | string | Reader name or part of it; default the first reader. |
 | `--openpgp-pin` | string | The user PIN (PW1); else IDPDBG_OPENPGP_PIN or a no-echo prompt. Never tried with fewer than 2 attempts left, and never retried. Secret: falls back to `IDPDBG_OPENPGP_PIN`, redacted in traces. |
-| `--ciphertext` | string | RSA: the PKCS #1 v1.5 ciphertext; ECDH: the sender's ephemeral public key (hex or base64). Default: a round trip. CLI: `@path` reads a file, `-` reads stdin. |
+| `--ciphertext` | string | RSA: the PKCS #1 v1.5 ciphertext; ECDH: the sender's ephemeral public key (hex or base64). Default: a round trip. CLI only. CLI: `@path` reads a file, `-` reads stdin. |
 
 Plus the [common parameters](README.md#common-parameters).
 

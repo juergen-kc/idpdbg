@@ -409,6 +409,9 @@ func runOpenPGPSign(c *Ctx) (M, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := pgpCLIOnly(c, "message"); err != nil {
+		return nil, err
+	}
 	msg := []byte(c.Str("message"))
 	if len(msg) == 0 {
 		msg = []byte("idpdbg OpenPGP card test " + time.Now().UTC().Format(time.RFC3339))
@@ -457,7 +460,9 @@ func runOpenPGPSign(c *Ctx) (M, error) {
 		out["checks"] = cs
 		return out, nil
 	}
-	out["signature"] = hex.EncodeToString(sig)
+	if c.CLI {
+		out["signature"] = hex.EncodeToString(sig)
+	}
 	var verr error
 	switch k := pub.key.(type) {
 	case *rsa.PublicKey:
@@ -492,6 +497,9 @@ func runOpenPGPSign(c *Ctx) (M, error) {
 }
 
 func runOpenPGPDecrypt(c *Ctx) (M, error) {
+	if err := pgpCLIOnly(c, "ciphertext"); err != nil {
+		return nil, err
+	}
 	s := pgpSlots["decryption"]
 	card, err := openPGPCard(c)
 	if err != nil {
@@ -563,6 +571,17 @@ func runOpenPGPDecrypt(c *Ctx) (M, error) {
 	return withChecks(out, cs), nil
 }
 
+// pgpCLIOnly keeps the card from becoming a signing or decryption oracle
+// over MCP: there a caller (a model, possibly steered by what it read) could
+// otherwise have the person's key sign a commit or an email, or decrypt
+// their mail. Over MCP only idpdbg's own test values are used.
+func pgpCLIOnly(c *Ctx, param string) error {
+	if !c.CLI && strings.TrimSpace(c.Str(param)) != "" {
+		return fmt.Errorf("%s is only accepted from the CLI: over MCP the card signs and decrypts only idpdbg's own test values", param)
+	}
+	return nil
+}
+
 func withChecks(out M, cs Checks) M { out["checks"] = cs; return out }
 
 // cardBytesOpt is cardBytes for an optional value.
@@ -584,7 +603,7 @@ func init() {
 			Summary: "Sign with an OpenPGP card's signature key (PSO: COMPUTE DIGITAL SIGNATURE) or authentication key (INTERNAL AUTHENTICATE), and check the signature with the slot's public key read from the card, that key against the stored fingerprint, and that the signature counter went up. Needs the user PIN (PW1).",
 			Params: joinParams(common, []Param{
 				{Name: "slot", Type: "string", Default: "signature", Enum: []string{"signature", "authentication"}, Desc: "Which key"},
-				{Name: "message", Type: "string", File: true, Desc: "What to sign (default: a test string)"},
+				{Name: "message", Type: "string", File: true, Desc: "What to sign (default: a test string). CLI only: over MCP the card signs only idpdbg's test string, and the signature is not returned"},
 				{Name: "hash", Type: "string", Default: "sha256", Enum: []string{"sha256", "sha384", "sha512"}, Desc: "Hash of the message the card signs"},
 			}),
 			Run: runOpenPGPSign,
@@ -593,7 +612,7 @@ func init() {
 			Name:    "card.openpgp_decrypt",
 			Summary: "Decrypt with an OpenPGP card's decryption key (PSO: DECIPHER). Without a ciphertext it is a round trip: idpdbg encrypts a random value to the slot's public key (RSA PKCS #1 v1.5, or an ephemeral ECDH key) and checks the card's answer. With one it returns the plaintext (RSA) or the ECDH shared secret. Needs the user PIN (PW1).",
 			Params: joinParams(common, []Param{
-				{Name: "ciphertext", Type: "string", File: true, Desc: "RSA: the PKCS #1 v1.5 ciphertext; ECDH: the sender's ephemeral public key (hex or base64). Default: a round trip"},
+				{Name: "ciphertext", Type: "string", File: true, Desc: "RSA: the PKCS #1 v1.5 ciphertext; ECDH: the sender's ephemeral public key (hex or base64). Default: a round trip. CLI only"},
 			}),
 			Run: runOpenPGPDecrypt,
 		},

@@ -26,7 +26,11 @@ as the release notes, and refuses a tag without one.
   ciphertext, decryption is a round trip to the slot's own public key. The
   user PIN (`--openpgp-pin`, `IDPDBG_OPENPGP_PIN` or a prompt) is tried at
   most once and never with fewer than two attempts left; cards that hash
-  PINs with a KDF are refused. Tested against an emulated card.
+  PINs with a KDF are refused. A message or ciphertext of the caller's
+  is only accepted from the CLI: over MCP the card signs and decrypts only
+  idpdbg's own test values and the signature is not returned, so the card
+  cannot be made to sign or decrypt anything else. Tested against an
+  emulated card.
 
 ## [0.29.0] - 2026-11-24
 
