@@ -136,10 +136,21 @@ PKINIT, although RFC 8062 says it should with Diffie-Hellman too.
 The [roadmap](../ROADMAP.md) says which of these are planned, and in which
 order.
 
-Compared with the upstream debugger this version leaves out: SAML 1.1 browser
-profiles; WS-Trust renew/cancel, proof-of-possession
-keys; the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
-on security keys, setting or changing the PIN, Bluetooth, and on Windows the fido commands without administrator rights (credential management and NFC are tested against emulated keys only);
-on smart cards, OpenPGP key generation and import, changing PIV PINs,
-PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; for SPIRE, banning or deleting agents, CA rotation and federation changes; XACML AttributeSelector (XPath) and ALFA;
-composite (hybrid) and SLH-DSA certificates; indirect CRLs.
+Compared with the upstream debugger, this version leaves out:
+
+- SAML 1.1 browser profiles; WS-Trust renew and cancel, and
+  proof-of-possession keys.
+- The Digital Credentials API.
+- For the software authenticator, the TPM, Android and Apple attestation
+  formats; ML-DSA keys in COSE (passkeys).
+- On security keys: setting or changing the PIN, Bluetooth, and on Windows
+  the `fido` commands without administrator rights. Credential management
+  and NFC are tested against emulated keys only.
+- On smart cards: OpenPGP key generation and import, OpenPGP PINs hashed
+  with a KDF, changing PIV PINs, PUKs or management keys, and secure
+  messaging.
+- FAST with cross-realm armor, and FAST factors other than encrypted
+  challenge.
+- For SPIRE: banning or deleting agents, CA rotation and federation changes.
+- XACML AttributeSelector (XPath) and ALFA.
+- Composite (hybrid) and SLH-DSA certificates; indirect CRLs.

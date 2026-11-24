@@ -21,10 +21,10 @@ type rpcMsg struct {
 }
 
 const mcpInstructions = `idpdbg is an identity protocol debugger. It plays the client / relying party / service provider against a real identity provider and returns each exchange decoded, with a "checks" list of spec-conformance findings (pass, fail, warn, info).
-Tools are grouped by prefix: oidc_ and jwt_/jwks_ (OAuth 2.0, OpenID Connect), saml_ (SAML 2.0), scim_ (SCIM 2.0 provisioning), ldap_ (directories).
+Tool names start with their protocol group: oidc_ and jwt_/jwks_ (OAuth 2.0, OpenID Connect), saml_, wsfed_/wstrust_, scim_, ldap_, krb_/spnego_ (Kerberos), pki_/tls_ (certificates, TLS), webauthn_/fido_ (passkeys, security keys), card_ (smart cards), spiffe_/spire_ (workload identity), vci_/vp_/sdjwt_/mdoc_ (verifiable credentials), and more.
 Set trace=true on any HTTP-based tool to see the raw requests and responses.
 Secrets: prefer a named profile (the profile parameter) or IDPDBG_* environment variables over passing secrets as arguments.
-oidc_login and saml_login open the person's browser and block until they finish signing in; tell them before calling. webauthn_register and webauthn_login with a security key wait for the person to touch it; tell them before calling.
+oidc_login and saml_login open the person's browser and block until they finish signing in; tell them before calling. webauthn_register and webauthn_login with a security key wait for the person to touch it (on Windows, in Windows' own dialog); tell them before calling. card_openpgp_sign and card_openpgp_decrypt only use idpdbg's own test values here, and fido_credential_delete needs confirm and the key's PIN passed in the call.
 Tools marked as not read-only change data at the remote system; confirm with the person first.`
 
 func toolSchema(op *Op) M {

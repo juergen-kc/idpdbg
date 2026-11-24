@@ -68,7 +68,17 @@ can't send them elsewhere:
   `saml_authn_request` with `saml_decode`.
 - **Security keys and smart cards.** These wait for a touch, or ask for a PIN
   on the server's terminal. With no terminal, they take the PIN from the
-  environment (`IDPDBG_PIN`, `IDPDBG_PIV_PIN`).
+  environment (`IDPDBG_PIN`, `IDPDBG_PIV_PIN`, `IDPDBG_OPENPGP_PIN`). On
+  Windows, `webauthn_register` and `webauthn_login` show Windows' own
+  security-key dialog instead, so the server must run in your desktop
+  session.
+- **Deleting a passkey.** `fido_credential_delete` is a dry run unless
+  `confirm` is set, and over MCP it needs both `confirm` and the key's PIN
+  in the call: a PIN from the environment lists passkeys but never deletes
+  one.
+- **OpenPGP cards.** Over MCP, `card_openpgp_sign` and `card_openpgp_decrypt`
+  only sign and decrypt idpdbg's own test values, so a conversation cannot
+  make your card sign or decrypt anything else; use the CLI for that.
 - **Writes.** Tools that change data at the remote system or on a card are
   annotated as not read-only, so the client can ask before running them. See
   the [list](../reference/README.md#operations-that-change-data).

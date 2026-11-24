@@ -14,12 +14,13 @@ against the specifications.
 - **Readable when you need it.** `--report out.html` writes a page of the run
   to attach to a ticket.
 - **Tested against real servers.** Every push runs idpdbg against Keycloak,
-  Samba AD, MIT Kerberos and a SCIM server; [details](docs/testing.md).
+  Samba AD, MIT Kerberos, a SCIM server and SPIRE; [details](docs/testing.md).
 
 It covers OAuth 2.0 and OpenID Connect, JWT/JWE/SD-JWT, SAML 2.0, WS-Federation
-and WS-Trust, SCIM, LDAP, Kerberos and SPNEGO, PKI and TLS, WebAuthn and FIDO
-security keys, smart cards, SPIFFE, Shared Signals, GNAP, verifiable credentials
-and XACML. It is inspired by [idptools.com](https://idptools.com/) /
+and WS-Trust, SCIM, LDAP, Kerberos and SPNEGO, PKI and TLS (post-quantum ML-DSA
+and ML-KEM included), WebAuthn and FIDO security keys, PIV and OpenPGP smart
+cards, SPIFFE and SPIRE, Shared Signals, GNAP, verifiable credentials (SD-JWT VC
+and mdoc) and XACML. It is inspired by [idptools.com](https://idptools.com/) /
 [id-proto-debugger](https://rcbj.github.io/id-proto-debugger/), as a fresh Go
 implementation.
 
@@ -127,16 +128,16 @@ What each group covers:
 | [`jwt`](docs/reference/jwt.md), [`jwks`](docs/reference/jwks.md) | Decode, verify (RS/PS/ES/EdDSA/HS, and post-quantum ML-DSA; keys from the issuer, a JWKS, PEM or a secret) and sign JWTs; fetch a JWKS |
 | [`jwe`](docs/reference/jwe.md) | Decrypt and encrypt: RSA-OAEP, RSA1_5, ECDH-ES, AES and AES-GCM key wrap, PBES2, dir |
 | [`sdjwt`](docs/reference/sdjwt.md) | SD-JWT and SD-JWT VC: disclosures, reconstructed claims, issuer signature, key binding |
-| [`mdoc`](docs/reference/mdoc.md) | mdoc (ISO/IEC 18013-5, mDL and EUDI PID): issuer signature, document signer chain, MSO validity and element digests |
-| [`saml`](docs/reference/saml.md) | IdP and SP metadata, AuthnRequests, login with a local ACS (POST or Artifact), response decoding with signature checks and decryption, Single Logout |
-| [`wsfed`](docs/reference/wsfed.md), [`wstrust`](docs/reference/wstrust.md) | WS-Federation passive sign-in and wresult decoding; WS-Trust issue (AD FS usernamemixed) and validate |
+| [`mdoc`](docs/reference/mdoc.md) | mdoc (ISO/IEC 18013-5, mDL and EUDI PID): issuer signature, document signer chain, MSO validity and element digests; device authentication (signature or MAC) against the session transcript |
+| [`saml`](docs/reference/saml.md) | IdP and SP metadata, AuthnRequests, login with a local ACS (POST or Artifact), response decoding with signature checks and decryption, Single Logout (SP- and IdP-initiated) |
+| [`wsfed`](docs/reference/wsfed.md), [`wstrust`](docs/reference/wstrust.md) | WS-Federation passive sign-in and wresult decoding; WS-Trust issue (AD FS usernamemixed) and validate; encrypted tokens decrypted with the relying party's key |
 | [`scim`](docs/reference/scim.md) | Discovery, single requests, user and group lifecycle scenarios, bulk |
 | [`ldap`](docs/reference/ldap.md) | Root DSE, bind, paged search with Active Directory attributes decoded, writes, compare, password change and reset (RFC 3062, or `unicodePwd` on AD) |
-| [`krb`](docs/reference/krb.md) | kinit, service tickets with PAC verification, keytabs, message decoding, S4U constrained delegation (classic and resource-based), FAST, PKINIT with a key file or a PIV smart card; KDCs found through DNS SRV |
+| [`krb`](docs/reference/krb.md) | kinit, service tickets with PAC verification, keytabs, message decoding, S4U constrained delegation (classic and resource-based), FAST (armored by a TGT or by anonymous PKINIT), PKINIT with a key file or a PIV smart card, anonymous PKINIT; KDCs found through DNS SRV |
 | [`spnego`](docs/reference/spnego.md) | Negotiate sign-on to a web resource: offered schemes, NTLM fallback, mutual authentication |
-| [`pki`](docs/reference/pki.md) | Certificate, chain, CSR and CRL decoding, chain verification, a throwaway test CA, leaf issuance, OCSP and CRL revocation checks; post-quantum ML-DSA keys and signatures |
+| [`pki`](docs/reference/pki.md) | Certificate, chain, CSR and CRL decoding, chain verification, a throwaway test CA, leaf issuance, OCSP and CRL revocation checks (CRLs over HTTP or LDAP, delta CRLs included); post-quantum ML-DSA keys and signatures |
 | [`tls`](docs/reference/tls.md) | Versions, cipher, key exchange (post-quantum or not), ALPN, chain trust, OCSP stapling, client certificates, mutual TLS, LDAP and SMTP StartTLS |
-| [`webauthn`](docs/reference/webauthn.md) | Decode ceremonies; register and sign in against a relying party with a software authenticator or a real security key (on Windows through the Windows WebAuthn API, no administrator rights needed); `--tamper` negative tests |
+| [`webauthn`](docs/reference/webauthn.md) | Decode ceremonies; register and sign in against a relying party with a software authenticator (attestation none, packed or fido-u2f) or a real security key (on Windows through the Windows WebAuthn API, no administrator rights needed); `--tamper` negative tests |
 | [`fido`](docs/reference/fido.md) | Security keys over USB or an NFC reader, CTAP2 authenticatorGetInfo, the passkeys a key stores (list and delete, CTAP 2.1 credential management), FIDO Metadata Service (MDS3) lookups |
 | [`card`](docs/reference/card.md) | Read cards and YubiKeys over PC/SC; decode APDUs, PIV and OpenPGP objects; generate a PIV key on the card and import its certificate; sign, authenticate and decrypt with an OpenPGP card, checked against its public key and fingerprint |
 | [`oath`](docs/reference/oath.md), [`yubico`](docs/reference/yubico.md) | HOTP and TOTP codes; Yubico OTP decoding and checks |
@@ -144,7 +145,7 @@ What each group covers:
 | [`spire`](docs/reference/spire.md) | The SPIRE Server API over the admin socket or mTLS: server, CA and bundle state, entries, agents, federation; minting checked SVIDs; creating and deleting entries and join tokens |
 | [`ssf`](docs/reference/ssf.md) | Shared Signals: discovery, streams, poll and push delivery, Security Event Token checks for CAEP and RISC |
 | [`gnap`](docs/reference/gnap.md) | Grants with HTTP message signatures, interaction, continuation, rotation, revocation |
-| [`vci`](docs/reference/vci.md), [`vp`](docs/reference/vp.md) | OID4VCI pre-authorized issuance as a wallet; OID4VP requests and selective-disclosure presentations |
+| [`vci`](docs/reference/vci.md), [`vp`](docs/reference/vp.md) | OID4VCI issuance as a wallet (pre-authorized code, or the authorization code flow); OID4VP requests and presentations of SD-JWT VCs (selective disclosure) and mdocs (only the requested elements, device-signed) |
 | [`xacml`](docs/reference/xacml.md) | XACML 3.0 decisions with a trace, and policy lint |
 | [`tools`](docs/reference/tools.md) | Encode, decode (recognises JWT, JWE, SD-JWT, SAML and PEM inside URL, base64, hex and DEFLATE layers) and hash |
 
