@@ -14,8 +14,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/crypto/openpgp/packet" //nolint:staticcheck // an independent v4 fingerprint for the tests
 )
 
 // fakePGP emulates an OpenPGP card applet: PW1 with a retry counter and
@@ -249,8 +247,8 @@ func TestOpenPGPCardRSA(t *testing.T) {
 	}
 	f := newFakePGP(keys)
 	for _, s := range pgpSlotOrder {
-		pk := packet.NewRSAPublicKey(time.Unix(int64(f.created), 0), &keys[s].(*rsa.PrivateKey).PublicKey)
-		f.fps[s] = pk.Fingerprint[:]
+		k := keys[s].(*rsa.PrivateKey)
+		f.fps[s] = (&pgpPublic{algo: 1, n: k.N.Bytes(), e: big.NewInt(int64(k.E)).Bytes()}).v4Fingerprint(f.created)
 	}
 	useFakePGP(t, f)
 
@@ -340,7 +338,8 @@ func TestOpenPGPCardECC(t *testing.T) {
 	_, authKey, _ := ed25519.GenerateKey(rand.Reader)
 	f := newFakePGP(map[string]any{"signature": sigKey, "decryption": decKey, "authentication": authKey})
 	f.multiSig = true
-	f.fps["signature"] = packet.NewECDSAPublicKey(time.Unix(int64(f.created), 0), &sigKey.PublicKey).Fingerprint[:]
+	p256oid, _ := hex.DecodeString("2A8648CE3D030107")
+	f.fps["signature"] = (&pgpPublic{algo: 0x13, oid: p256oid, curve: "P-256", point: elliptic.Marshal(elliptic.P256(), sigKey.X, sigKey.Y)}).v4Fingerprint(f.created) //nolint:staticcheck
 	for _, s := range []string{"decryption", "authentication"} {
 		k := map[string]any{"decryption": decKey.PublicKey(), "authentication": authKey.Public()}[s]
 		var pub pgpPublic
@@ -385,4 +384,25 @@ func runCLI(t *testing.T, name string, args M) M {
 		t.Fatalf("%s: %v", name, err)
 	}
 	return res
+}
+
+// OpenPGP v4 fingerprints of keys GnuPG 2.5 made, as GnuPG printed them: an
+// independent check of v4Fingerprint for every algorithm the cards use.
+func TestOpenPGPFingerprintsAgainstGnuPG(t *testing.T) {
+	h := func(s string) []byte { b, _ := hex.DecodeString(s); return b }
+	for _, c := range []struct {
+		name    string
+		pub     pgpPublic
+		created uint32
+		fpr     string
+	}{
+		{"RSA 2048", pgpPublic{algo: 0x01, n: h("A738AFC52C94A86ECD823EC1351CB766A99541819C78F672AE193321EEDFC6A56D10FDA905A71CA1BDF87118375FC6A5B77258F5EFC5FAB6CF7612A85A11E53FBD1352DCD4DC9519773DC6118619A20D7BA32AA04D855DDA663F31DD57458606ADD74385C17CBFB2CAEAAFACCEE41540F0A4A55569FF609AC6DAFC2BBC894840E702AD73DF5B5CC421BEFC765B577537EF4585208047B10192963155711ADD339151B45BF6CBEC972F8F445CC7E189D882DC0571E348850FB8DB319F72F99B87BC39AFBB1D93DC1D8E677FB36A62FCFD7F4B0646FAACA061F123E61F094B065B30AC8DF90B801BB2C040BBBF148FE0806887AD039051473A7472B6F47B2DC41F"), e: h("010001")}, 1795548247, "C8C29D87CA906F51BC525A6A3404B95D23BC7DE2"},
+		{"ECDSA P-256", pgpPublic{algo: 0x13, oid: h("2A8648CE3D030107"), curve: "P-256", point: h("049EE2B3E419543A9DFBE510136F65DD231FB3626AC40217DD9B0F742684F864B8703F3D1C174AD9C5BD2B75DB5D3D833D4E25C6007BCD7A11D3998A709722711A")}, 1795548247, "C927E2E3FBB001829762F7750CFAECACC029E75F"},
+		{"EdDSA Ed25519", pgpPublic{algo: 0x16, oid: h("2B06010401DA470F01"), curve: "Ed25519", point: h("407FCD72901CFC1AD0B9A7C1873C4D863F8A06D81B28E8CC20B5F47A3B58FBAE55")}, 1795548256, "B2C647E9AF75E8D7B63412CAC713466C2A8AF242"},
+		{"ECDH Curve25519", pgpPublic{algo: 0x12, oid: h("2B060104019755010501"), curve: "Curve25519", point: h("407CE97D0BE3C860F67622C320C1CBCCC9C50DF310319F23AEB014D8FC06524211")}, 1795548257, "4B99651555CF7059375EB2381E65BDAF0D84E43E"},
+	} {
+		if got := strings.ToUpper(hex.EncodeToString(c.pub.v4Fingerprint(c.created))); got != c.fpr {
+			t.Errorf("%s: %s, GnuPG says %s", c.name, got, c.fpr)
+		}
+	}
 }

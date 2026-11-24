@@ -14,6 +14,12 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Changed
+- Dependencies: golang.org/x/crypto 0.59.0, golang.org/x/net 0.63.0,
+  google.golang.org/grpc 1.85.0.
+- The README, development guide, MCP guide and the instructions the MCP
+  server gives clients describe everything added since 0.25.0.
+
 ## [0.34.0] - 2026-11-24
 
 ### Added
