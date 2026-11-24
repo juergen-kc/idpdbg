@@ -358,7 +358,7 @@ func runFIDOCredentialDelete(c *Ctx) (M, error) {
 }
 
 func init() {
-	device := Param{Name: "device", Type: "string", Desc: "Which key: index or path from fido.devices (default: the only one connected)"}
+	device := Param{Name: "device", Type: "string", Desc: "Which key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:<part of the reader name>, for a key on an NFC reader"}
 	pin := Param{Name: "pin", Type: "string", Secret: true, Desc: "Security key PIN (prefer env IDPDBG_PIN or a profile; from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts"}
 	// Deleting cannot be undone and has no relying party to bind a stored
 	// PIN to, so over MCP the PIN must come in the call.

@@ -304,9 +304,12 @@ func hwRegister(c *Ctx, cs *Checks, api *rpAPI, out, o M, origin, rpID string, c
 	protocol := "ctap2"
 	uvWanted := false
 	err = withFIDO(c, c.Str("device"), func(d *ctapDevice) error {
-		info, err := getInfo(d)
-		if err != nil {
-			return err
+		// A key that speaks only U2F has no getInfo: it offers U2F alone.
+		info := map[any]any{int64(1): []any{"U2F_V2"}}
+		if d.caps&0x04 != 0 {
+			if info, err = getInfo(d); err != nil {
+				return err
+			}
 		}
 		opts, _ := info[int64(4)].(map[any]any)
 		pinSet, _ := opts["clientPin"].(bool)
@@ -325,6 +328,11 @@ func hwRegister(c *Ctx, cs *Checks, api *rpAPI, out, o M, origin, rpID string, c
 			return errors.New("U2F cannot do this registration (it needs ES256, no discoverable credential, no required user verification, and a key that speaks U2F)")
 		case mode == "u2f":
 			protocol = "u2f"
+		case d.caps&0x04 == 0 && u2fOK:
+			protocol = "u2f"
+			why = "the key speaks only U2F"
+		case d.caps&0x04 == 0:
+			return errors.New("this key speaks only U2F, which cannot do this registration (it needs ES256, no discoverable credential and no required user verification)")
 		case mode == "auto" && must && policy == "discouraged" && u2fOK:
 			protocol = "u2f"
 			why = "the key has a PIN set and needs it for CTAP2 registration, and the relying party discourages user verification, so, like a browser, idpdbg used U2F, which needs only a touch"

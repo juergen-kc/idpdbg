@@ -14,6 +14,20 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- FIDO security keys on an NFC (or any PC/SC) reader: `--device nfc`, or
+  `nfc:<part of the reader name>`, for `fido info`, `fido credentials`,
+  `fido credential_delete`, `webauthn register` and `webauthn login`.
+  CTAP2 travels in NFCCTAP_MSG APDUs, with command chaining for long
+  requests and status updates while the key waits; U2F requests are plain
+  APDUs (CTAP 2.1 §11.3). `fido devices` lists keys on readers too, found
+  by selecting the FIDO applet. Tested against an emulated key on an
+  emulated reader; no NFC reader has been tried yet.
+
+### Fixed
+- A security key that speaks only U2F can register: idpdbg no longer asks
+  it for CTAP2 authenticatorGetInfo first.
+
 ## [0.30.0] - 2026-11-24
 
 ### Added

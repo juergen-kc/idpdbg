@@ -50,6 +50,8 @@ type fakeKey struct {
 	pending [][]byte
 	// credential management: 2.1 (credMgmt) or the preview (0x41)
 	cmV21, cmPreview bool
+	// over NFC (ctapnfc_test.go)
+	nfcMode, nfcWaiting bool
 	cmLie            bool // getCredsMetadata miscounts
 	tokPerms         int64
 	cmQueue          [][]byte
@@ -124,7 +126,13 @@ func (k *fakeKey) Write(p []byte) error {
 	return nil
 }
 
-func (k *fakeKey) keepalive(cid uint32) { k.reply(cid, ctaphidKeepalive, []byte{2}) }
+func (k *fakeKey) keepalive(cid uint32) {
+	if k.nfcMode { // over NFC a status update (SW 9100) says it instead
+		k.nfcWaiting = true
+		return
+	}
+	k.reply(cid, ctaphidKeepalive, []byte{2})
+}
 
 func (k *fakeKey) cbor(cid uint32, cmd byte, b []byte) []byte {
 	var req map[any]any

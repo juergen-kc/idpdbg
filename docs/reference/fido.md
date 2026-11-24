@@ -12,7 +12,7 @@ MCP tool: `fido_credentials`.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `--device` | string | Which key: index or path from fido.devices (default: the only one connected). |
+| `--device` | string | Which key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:&lt;part of the reader name&gt;, for a key on an NFC reader. |
 | `--pin` | string | Security key PIN (prefer env IDPDBG_PIN or a profile; from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts. Secret: falls back to `IDPDBG_PIN`, redacted in traces. |
 | `--rp-id` | string | Show only this relying party's passkeys. |
 
@@ -26,7 +26,7 @@ MCP tool: `fido_credential_delete`. **Changes data at the remote system.**
 
 | Parameter | Type | Description |
 |---|---|---|
-| `--device` | string | Which key: index or path from fido.devices (default: the only one connected). |
+| `--device` | string | Which key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:&lt;part of the reader name&gt;, for a key on an NFC reader. |
 | `--pin` | string | Security key PIN (from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts. Secret: falls back to `IDPDBG_PIN`, redacted in traces. Over MCP it must be passed in the call, never taken from a profile or the environment. |
 | `--credential-id` | string | The passkey's credential ID (base64url, from fido.credentials). **Required.** |
 | `--rp-id` | string | Refuse unless the passkey belongs to this relying party. |
@@ -36,13 +36,14 @@ Plus the [common parameters](README.md#common-parameters).
 
 ## fido devices
 
-List the FIDO security keys connected over USB: path, vendor and product, CTAPHID version and capabilities (CTAP2, U2F, wink), supported CTAP versions and AAGUID. wink makes each key blink to tell them apart.
+List the FIDO security keys connected over USB: path, vendor and product, CTAPHID version and capabilities (CTAP2, U2F, wink), supported CTAP versions and AAGUID. wink makes each key blink to tell them apart. Keys on NFC readers (PC/SC) are listed too, as nfc:&lt;reader&gt;.
 
 MCP tool: `fido_devices`.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `--wink` | bool | Make each key blink (CTAPHID_WINK). |
+| `--nfc` | bool | Also list keys on smart-card and NFC readers (PC/SC), found by selecting the FIDO applet. Default `true`. |
 
 Plus the [common parameters](README.md#common-parameters).
 
@@ -54,7 +55,7 @@ MCP tool: `fido_info`.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `--device` | string | Which key: index or path from fido.devices (default: the only one connected). |
+| `--device` | string | Which key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:&lt;part of the reader name&gt;, for a key on an NFC reader. |
 | `--metadata` | bool | Also look the model up in the FIDO Metadata Service (certification, security status). |
 
 Plus the [common parameters](README.md#common-parameters).

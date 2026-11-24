@@ -108,7 +108,7 @@ func runFIDODevices(c *Ctx) (M, error) {
 	}
 	var list []M
 	for i, info := range devs {
-		e := M{"index": i, "path": info.Path, "vendor_id": fmt.Sprintf("0x%04x", info.VendorID), "product_id": fmt.Sprintf("0x%04x", info.ProductID),
+		e := M{"index": i, "transport": "usb", "path": info.Path, "vendor_id": fmt.Sprintf("0x%04x", info.VendorID), "product_id": fmt.Sprintf("0x%04x", info.ProductID),
 			"manufacturer": info.Manufacturer, "product": info.Product}
 		err := withFIDO(c, info.Path, func(d *ctapDevice) error {
 			e["ctaphid_protocol"], e["device_version"], e["capabilities"] = d.protocol, d.version, capList(d.caps)
@@ -132,14 +132,29 @@ func runFIDODevices(c *Ctx) (M, error) {
 		}
 		list = append(list, e)
 	}
-	return M{"devices": list, "count": len(list)}, nil
+	out := M{}
+	if c.Bool("nfc") {
+		// Keys on PC/SC readers (NFC): found by selecting the FIDO applet.
+		if nfc, err := nfcReaders(); err != nil {
+			out["nfc_error"] = err.Error()
+		} else {
+			for _, info := range nfc {
+				list = append(list, M{"path": info.Path, "transport": "nfc", "reader": info.Product, "applet": strings.TrimSuffix(strings.TrimPrefix(info.Manufacturer, "FIDO applet ("), ")")})
+			}
+		}
+	}
+	out["devices"], out["count"] = list, len(list)
+	return out, nil
 }
 
 func runFIDOInfo(c *Ctx) (M, error) {
 	var cs Checks
 	out := M{}
 	err := withFIDO(c, c.Str("device"), func(d *ctapDevice) error {
-		out["device"] = M{"path": d.info.Path, "manufacturer": d.info.Manufacturer, "product": d.info.Product, "device_version": d.version, "capabilities": capList(d.caps)}
+		out["device"] = M{"path": d.info.Path, "manufacturer": d.info.Manufacturer, "product": d.info.Product, "device_version": d.version, "capabilities": capList(d.caps), "transport": "usb (CTAPHID)"}
+		if d.nfc != nil {
+			out["device"] = M{"path": d.info.Path, "reader": d.info.Product, "applet": d.version, "capabilities": capList(d.caps), "transport": "nfc (ISO 7816 over PC/SC)"}
+		}
 		m, err := getInfo(d)
 		if err != nil {
 			return err
@@ -234,14 +249,15 @@ func init() {
 	register(
 		&Op{
 			Name:    "fido.devices",
-			Summary: "List the FIDO security keys connected over USB: path, vendor and product, CTAPHID version and capabilities (CTAP2, U2F, wink), supported CTAP versions and AAGUID. wink makes each key blink to tell them apart.",
-			Params:  []Param{{Name: "wink", Type: "bool", Desc: "Make each key blink (CTAPHID_WINK)"}},
-			Run:     runFIDODevices,
+			Summary: "List the FIDO security keys connected over USB: path, vendor and product, CTAPHID version and capabilities (CTAP2, U2F, wink), supported CTAP versions and AAGUID. wink makes each key blink to tell them apart. Keys on NFC readers (PC/SC) are listed too, as nfc:<reader>.",
+			Params: []Param{{Name: "wink", Type: "bool", Desc: "Make each key blink (CTAPHID_WINK)"},
+				{Name: "nfc", Type: "bool", Default: true, Desc: "Also list keys on smart-card and NFC readers (PC/SC), found by selecting the FIDO applet"}},
+			Run: runFIDODevices,
 		},
 		&Op{
 			Name:    "fido.info",
 			Summary: "Ask a connected FIDO security key about itself (CTAP2 authenticatorGetInfo): CTAP versions, AAGUID, options explained (PIN set, discoverable credentials, built-in user verification, credential management, enterprise attestation), algorithms, extensions, firmware version, PIN length rules and free passkey slots. Needs no touch.",
-			Params: []Param{{Name: "device", Type: "string", Desc: "Which key: index or path from fido.devices (default: the only one connected)"},
+			Params: []Param{{Name: "device", Type: "string", Desc: "Which key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:<part of the reader name>, for a key on an NFC reader"},
 				{Name: "metadata", Type: "bool", Desc: "Also look the model up in the FIDO Metadata Service (certification, security status)"}},
 			Run: runFIDOInfo,
 		},

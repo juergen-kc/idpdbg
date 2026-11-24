@@ -47,7 +47,7 @@ MCP tool: `webauthn_register`. **Changes data at the remote system.**
 | `--origin` | string | Origin the browser would report (default: the server's). |
 | `--username` | string | Account name sent with server. Default `idpdbg-test`. |
 | `--user-verified` | bool | Software authenticator: set the UV flag (a simulated PIN or biometric). Default `true`. |
-| `--device` | string | Security key: index or path from fido.devices (default: the only one connected). |
+| `--device` | string | Security key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:&lt;part of the reader name&gt;, for a key on an NFC reader. |
 | `--ctap` | string | Security key protocol: auto does what a browser does (CTAP2, or U2F when the key would need a PIN that is not available). Default `auto`. One of `auto`, `ctap2`, `u2f`. |
 | `--pin` | string | Security key PIN, for user verification as a browser would ask for it (prefer env IDPDBG_PIN or a profile; from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts. Secret: falls back to `IDPDBG_PIN`, redacted in traces. |
 | `--authenticator` | string | software, or usb for a connected security key. Default `software`. One of `software`, `usb`. |
@@ -81,7 +81,7 @@ MCP tool: `webauthn_login`.
 | `--origin` | string | Origin the browser would report (default: the server's). |
 | `--username` | string | Account name sent with server. Default `idpdbg-test`. |
 | `--user-verified` | bool | Software authenticator: set the UV flag (a simulated PIN or biometric). Default `true`. |
-| `--device` | string | Security key: index or path from fido.devices (default: the only one connected). |
+| `--device` | string | Security key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:&lt;part of the reader name&gt;, for a key on an NFC reader. |
 | `--ctap` | string | Security key protocol: auto does what a browser does (CTAP2, or U2F when the key would need a PIN that is not available). Default `auto`. One of `auto`, `ctap2`, `u2f`. |
 | `--pin` | string | Security key PIN, for user verification as a browser would ask for it (prefer env IDPDBG_PIN or a profile; from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts. Secret: falls back to `IDPDBG_PIN`, redacted in traces. |
 | `--credential` | string | The credential from webauthn.register (idpdbg-webauthn:...) Secret: falls back to `IDPDBG_CREDENTIAL`, redacted in traces. CLI: `@path` reads a file, `-` reads stdin. May be a file path (CLI or profile only). Over MCP it must be passed in the call, never taken from a profile or the environment. |

@@ -3,7 +3,7 @@
 What idpdbg doesn't cover yet, and in which order it is planned. Items are
 ordered by how useful they are when debugging real identity systems, how
 much work they are, and whether CI can test them against a real server, as
-it does for Keycloak, Samba AD, MIT Kerberos and a SCIM server today.
+it does for Keycloak, Samba AD, MIT Kerberos, a SCIM server and SPIRE today.
 
 Every item lands as its own change: with tests, an interop test where a real
 server can run in CI, a CHANGELOG entry, and the line removed from
@@ -20,11 +20,15 @@ logout, certificate attestation for the software authenticator, and
 server-supplied URLs held to public addresses. The
 [CHANGELOG](CHANGELOG.md) has the details.
 
-## Phase 2: next
+## Phase 2: done
 
-| Item | Why | Size | How it is tested |
-|---|---|---|---|
-| FIDO over NFC | Security keys through an NFC reader, over the existing PC/SC support | S–M | Real keys by hand (needs a reader) |
+The OpenID4VCI authorization code flow, mdoc credentials (decoding, device
+authentication, and presentation over OpenID4VP), CTAP 2.1 credential
+management, the SPIRE Server API, OpenPGP card signing and decryption, and
+FIDO security keys on NFC readers. The [CHANGELOG](CHANGELOG.md) has the
+details.
+
+There is no phase 3 yet: what comes next depends on what people need.
 
 ## On request
 

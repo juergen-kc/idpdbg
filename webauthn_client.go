@@ -953,7 +953,7 @@ func init() {
 		{Name: "origin", Type: "string", Desc: "Origin the browser would report (default: the server's)"},
 		{Name: "username", Type: "string", Desc: "Account name sent with server", Default: "idpdbg-test"},
 		{Name: "user_verified", Type: "bool", Desc: "Software authenticator: set the UV flag (a simulated PIN or biometric)", Default: true},
-		{Name: "device", Type: "string", Desc: "Security key: index or path from fido.devices (default: the only one connected)"},
+		{Name: "device", Type: "string", Desc: "Security key: index or path from fido.devices (default: the only one on USB); nfc, or nfc:<part of the reader name>, for a key on an NFC reader"},
 		{Name: "ctap", Type: "string", Enum: []string{"auto", "ctap2", "u2f"}, Default: "auto", Desc: "Security key protocol: auto does what a browser does (CTAP2, or U2F when the key would need a PIN that is not available)"},
 		{Name: "pin", Type: "string", Secret: true, Desc: "Security key PIN, for user verification as a browser would ask for it (prefer env IDPDBG_PIN or a profile; from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts"},
 	}

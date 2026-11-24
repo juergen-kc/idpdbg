@@ -79,6 +79,7 @@ var errTouchTimeout = errors.New("timed out waiting for the security key (was it
 
 type ctapDevice struct {
 	hid         hidDevice
+	nfc         cardConn // set instead of hid for a key on a PC/SC (NFC) reader
 	info        hidInfo
 	cid         uint32
 	protocol    byte
@@ -183,6 +184,9 @@ func (d *ctapDevice) recv(cid uint32, cmd byte, deadline time.Time) ([]byte, err
 // transact sends a command and waits for its answer. When the wait runs
 // out (usually: nobody touched the key) it cancels the request.
 func (d *ctapDevice) transact(cmd byte, data []byte, timeout time.Duration) ([]byte, error) {
+	if d.nfc != nil {
+		return d.nfcTransact(cmd, data, timeout)
+	}
 	if err := d.send(d.cid, cmd, data); err != nil {
 		return nil, err
 	}
@@ -286,7 +290,7 @@ func pickFIDO(sel string) (hidInfo, error) {
 	if sel == "" {
 		switch len(devs) {
 		case 0:
-			return hidInfo{}, errors.New("no FIDO security key found: plug one in")
+			return hidInfo{}, errors.New("no FIDO security key found over USB: plug one in, or pass device nfc for one on an NFC reader")
 		case 1:
 			return devs[0], nil
 		}
@@ -310,6 +314,14 @@ func pickFIDO(sel string) (hidInfo, error) {
 // withFIDO opens a key, runs f, and closes it, all on one OS thread (macOS
 // delivers input reports to the run loop of the thread that opened it).
 func withFIDO(c *Ctx, sel string, f func(*ctapDevice) error) error {
+	if isNFCSelector(sel) {
+		d, err := openNFC(sel)
+		if err != nil {
+			return err
+		}
+		defer d.nfc.Close()
+		return f(d)
+	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	info, err := pickFIDO(sel)
