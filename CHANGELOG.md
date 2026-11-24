@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-24
+
 ### Added
 - ML-DSA in JOSE (draft-ietf-cose-dilithium): `jwt sign` and `jwt verify`
   with ML-DSA-44, ML-DSA-65 and ML-DSA-87, keys as `AKP` JWKs (public `pub`,
@@ -755,7 +757,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/juergen-kc/idpdbg/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/juergen-kc/idpdbg/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/juergen-kc/idpdbg/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/juergen-kc/idpdbg/compare/v0.30.0...v0.31.0
