@@ -22,7 +22,7 @@ Every operation runs as `idpdbg <group> <operation> [--param value ...]` and as 
 | [pki](pki.md) — X.509 certificates, OCSP and CRLs | [`decode`](pki.md#pki-decode), [`verify`](pki.md#pki-verify), [`ca`](pki.md#pki-ca), [`issue`](pki.md#pki-issue), [`ocsp`](pki.md#pki-ocsp), [`crl`](pki.md#pki-crl) |
 | [tls](tls.md) — TLS servers | [`probe`](tls.md#tls-probe) |
 | [webauthn](webauthn.md) — WebAuthn and passkeys | [`decode`](webauthn.md#webauthn-decode), [`register`](webauthn.md#webauthn-register), [`login`](webauthn.md#webauthn-login) |
-| [fido](fido.md) — FIDO security keys | [`devices`](fido.md#fido-devices), [`info`](fido.md#fido-info), [`metadata`](fido.md#fido-metadata) |
+| [fido](fido.md) — FIDO security keys | [`credentials`](fido.md#fido-credentials), [`credential_delete`](fido.md#fido-credential_delete), [`devices`](fido.md#fido-devices), [`info`](fido.md#fido-info), [`metadata`](fido.md#fido-metadata) |
 | [card](card.md) — Smart cards, PIV and OpenPGP tokens | [`read`](card.md#card-read), [`apdu`](card.md#card-apdu), [`piv`](card.md#card-piv), [`openpgp`](card.md#card-openpgp), [`piv_generate`](card.md#card-piv_generate), [`piv_import`](card.md#card-piv_import) |
 | [oath](oath.md) — OATH one-time passwords | [`code`](oath.md#oath-code) |
 | [yubico](yubico.md) — Yubico OTP | [`otp`](yubico.md#yubico-otp) |
@@ -91,6 +91,7 @@ They change state at the remote system (or, for the `card` writes, on the card) 
 - [`ldap rename`](ldap.md#ldap-rename) (`ldap_rename`)
 - [`ldap passwd`](ldap.md#ldap-passwd) (`ldap_passwd`)
 - [`webauthn register`](webauthn.md#webauthn-register) (`webauthn_register`)
+- [`fido credential_delete`](fido.md#fido-credential_delete) (`fido_credential_delete`)
 - [`card piv_generate`](card.md#card-piv_generate) (`card_piv_generate`)
 - [`card piv_import`](card.md#card-piv_import) (`card_piv_import`)
 - [`ssf stream`](ssf.md#ssf-stream) (`ssf_stream`)

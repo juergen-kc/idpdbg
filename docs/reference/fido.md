@@ -4,6 +4,36 @@
 
 [All groups](README.md)
 
+## fido credentials
+
+List the passkeys (discoverable credentials) stored on a FIDO security key with CTAP 2.1 credential management: per relying party the credential ID, user handle and name, public key and credProtect level, plus how many are stored and how much room is left. Needs the key's PIN; needs no touch.
+
+MCP tool: `fido_credentials`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `--device` | string | Which key: index or path from fido.devices (default: the only one connected). |
+| `--pin` | string | Security key PIN (prefer env IDPDBG_PIN or a profile; from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts. Secret: falls back to `IDPDBG_PIN`, redacted in traces. |
+| `--rp-id` | string | Show only this relying party's passkeys. |
+
+Plus the [common parameters](README.md#common-parameters).
+
+## fido credential_delete
+
+Delete one passkey from a FIDO security key (CTAP 2.1 credential management). Without confirm it is a dry run that shows which passkey and account would go; with confirm the key deletes it and idpdbg lists again to see that it is gone. Cannot be undone. Needs the key's PIN.
+
+MCP tool: `fido_credential_delete`. **Changes data at the remote system.**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `--device` | string | Which key: index or path from fido.devices (default: the only one connected). |
+| `--pin` | string | Security key PIN (from a terminal idpdbg asks). Never retried: a wrong PIN costs one of the key's attempts. Secret: falls back to `IDPDBG_PIN`, redacted in traces. Over MCP it must be passed in the call, never taken from a profile or the environment. |
+| `--credential-id` | string | The passkey's credential ID (base64url, from fido.credentials). **Required.** |
+| `--rp-id` | string | Refuse unless the passkey belongs to this relying party. |
+| `--confirm` | bool | Really delete it. Without it nothing is deleted. Over MCP it must be passed in the call, never taken from a profile or the environment. |
+
+Plus the [common parameters](README.md#common-parameters).
+
 ## fido devices
 
 List the FIDO security keys connected over USB: path, vendor and product, CTAPHID version and capabilities (CTAP2, U2F, wink), supported CTAP versions and AAGUID. wink makes each key blink to tell them apart.

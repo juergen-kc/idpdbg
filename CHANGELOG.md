@@ -14,6 +14,20 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- `fido credentials` lists the passkeys a security key stores, by relying
+  party (CTAP 2.1 credential management, or the pre-2.1 preview): credential
+  ID, user handle and name, public key and credProtect level, and how many
+  are stored and how much room is left. It checks that each rpIDHash is the
+  SHA-256 of the RP ID and that the listed count matches the key's own.
+  Needs the key's PIN, with a token limited to credential management.
+- `fido credential_delete` deletes one passkey. Without `--confirm` it is a
+  dry run that shows which account would go; with it, idpdbg lists again
+  to see that the passkey is gone. `--rp-id` refuses a passkey of another
+  relying party. Over MCP both `confirm` and the PIN must be passed in the
+  call. Tested against an emulated key; the YubiKey here (5.1)
+  predates credential management and is reported as not supporting it.
+
 ## [0.28.0] - 2026-11-24
 
 ### Added

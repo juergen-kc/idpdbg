@@ -24,7 +24,6 @@ server-supplied URLs held to public addresses. The
 
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
-| CTAP 2.1 credential management | List the passkeys on a security key; deleting only with explicit confirmation | M | Emulated key in the unit tests; real keys by hand |
 | SPIRE Server API | The server's administration API, next to the Workload API | L | SPIRE server container in CI |
 | FIDO over NFC | Security keys through an NFC reader, over the existing PC/SC support | S–M | Real keys by hand (needs a reader) |
 | OpenPGP card signing and decryption | Card operations that need the PIN; no key generation | M | Emulated card in the unit tests; real cards by hand |

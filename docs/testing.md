@@ -107,7 +107,7 @@ order.
 Compared with the upstream debugger this version leaves out: SAML 1.1 browser
 profiles; WS-Trust renew/cancel, proof-of-possession
 keys; the Digital Credentials API; for the software authenticator, the TPM, Android and Apple attestation formats;
-on security keys, setting or changing the PIN, credential management, NFC and Bluetooth, and Windows;
+on security keys, setting or changing the PIN, NFC and Bluetooth, and Windows (credential management is tested against an emulated key only);
 on smart cards, OpenPGP card operations that need a PIN, changing PIV PINs,
 PUKs or management keys, and secure messaging; FAST with cross-realm armor, and FAST factors other than encrypted challenge; the SPIRE Server API; XACML AttributeSelector (XPath) and ALFA;
 post-quantum certificates; indirect CRLs.

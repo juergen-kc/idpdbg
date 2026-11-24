@@ -86,6 +86,10 @@ explicitly is always used as given.
   environment. Keys that authenticate idpdbg to a server (`client_key`,
   `mtls_key`, `dpop_key`, keytabs) may come from a profile, and then only
   go to the profile's origins.
+- Deleting a passkey from a security key (`fido.credential_delete`) cannot
+  be undone. Without `confirm` it is a dry run, and over MCP both `confirm`
+  and the key's PIN must be passed in the call: a stored `IDPDBG_PIN` lists
+  passkeys but never deletes one.
 - `--report` is a command-line flag, not a tool parameter, so an MCP caller
   can't write an HTML report to disk. The CLI writes it to a new file readable
   only by you (replacing a link rather than writing through it), since it can

@@ -48,12 +48,18 @@ type fakeKey struct {
 	// discoverable credentials, and what getNextAssertion still owes
 	rks     []fakeRK
 	pending [][]byte
+	// credential management: 2.1 (credMgmt) or the preview (0x41)
+	cmV21, cmPreview bool
+	cmLie            bool // getCredsMetadata miscounts
+	tokPerms         int64
+	cmQueue          [][]byte
 }
 
 type fakeRK struct {
-	rpID string
-	id   []byte
-	user map[any]any
+	rpID    string
+	id      []byte
+	user    map[any]any
+	protect int64
 }
 
 func newFakeKey(t *testing.T, pinSet bool) *fakeKey {
@@ -139,9 +145,21 @@ func (k *fakeKey) cbor(cid uint32, cmd byte, b []byte) []byte {
 			info[4].(map[any]any)["makeCredUvNotRqd"] = true
 			info[6] = []any{2, 1}
 		}
+		if k.cmV21 {
+			info[4].(map[any]any)["credMgmt"] = true
+		}
+		if k.cmPreview {
+			info[1] = append(info[1].([]any), "FIDO_2_1_PRE")
+			info[4].(map[any]any)["credentialMgmtPreview"] = true
+		}
 		return append([]byte{0}, cborEncode(info)...)
 	case ctapClientPIN:
 		return k.clientPIN(req)
+	case ctapCredMgmt, ctapCredMgmtPreview:
+		if cmd == ctapCredMgmt && !k.cmV21 || cmd == ctapCredMgmtPreview && !k.cmPreview {
+			return []byte{0x01}
+		}
+		return k.credMgmt(cmd, req)
 	case ctapGetNextAssertion:
 		if len(k.pending) == 0 {
 			return []byte{0x30} // NOT_ALLOWED
@@ -489,6 +507,10 @@ func (k *fakeKey) clientPIN(req map[any]any) []byte {
 			return []byte{0x31}
 		}
 		k.token, k.tokProto = randomBytes(32), int(proto)
+		k.tokPerms, _ = req[int64(9)].(int64)
+		if sub == pinSubGetToken {
+			k.tokPerms = 0xFF // a CTAP 2.0 token may do anything
+		}
 		et, _ := sess.encrypt(k.token)
 		return ok(map[any]any{2: et})
 	}

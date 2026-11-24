@@ -58,7 +58,7 @@ var ctap2Hints = map[byte]string{
 	0x2E: "the key holds no credential for this relying party (wrong key, or the credential was made on another one)",
 	0x2F: "nobody touched the key in time",
 	0x31: "wrong PIN", 0x32: "the PIN is blocked: reset the key", 0x35: "no PIN is set",
-	0x36: "the key needs its PIN (or built-in user verification) for this, and idpdbg does not do PIN entry yet; with ctap=auto a registration falls back to U2F where it can",
+	0x36: "the key needs its PIN (or built-in user verification) for this: pass pin, or with ctap=auto a registration falls back to U2F where it can",
 	0x3B: "user presence is required",
 }
 
