@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -84,6 +85,11 @@ func spireDial(c *Ctx, cs *Checks, out M) (*spireClient, error) {
 		path := strings.TrimPrefix(c.Str("socket"), "unix://")
 		if path == "" {
 			path = spireDefaultSocket
+		}
+		// unix://host/path would read a relative path's first segment as an
+		// authority: dial an absolute path.
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
 		}
 		conn, err := grpc.NewClient("unix://"+path, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {

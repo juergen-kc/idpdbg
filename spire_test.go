@@ -257,6 +257,13 @@ func TestSPIREAdminSocket(t *testing.T) {
 	if info["uptime"] != "1m30s" || info["entries"] != int32(4) || info["via"] != "admin socket "+f.socket {
 		t.Errorf("info: %v", info)
 	}
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, f.socket); err == nil {
+			if r := run(t, "spire.info", M{"socket": rel}, nil); r["trust_domain"] != "spire.test" {
+				t.Errorf("relative socket path: %v", r)
+			}
+		}
+	}
 	if checkOf(info, "server authenticated as") != nil {
 		t.Error("an mTLS check on the admin socket")
 	}
