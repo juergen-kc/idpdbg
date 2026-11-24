@@ -14,7 +14,8 @@ against the specifications.
 - **Readable when you need it.** `--report out.html` writes a page of the run
   to attach to a ticket.
 - **Tested against real servers.** Every push runs idpdbg against Keycloak,
-  Samba AD, MIT Kerberos, a SCIM server and SPIRE; [details](docs/testing.md).
+  Samba AD, MIT Kerberos, a SCIM server, SPIRE and a Shared Signals
+  transmitter; [details](docs/testing.md).
 
 It covers OAuth 2.0 and OpenID Connect, JWT/JWE/SD-JWT, SAML 2.0, WS-Federation
 and WS-Trust, SCIM, LDAP, Kerberos and SPNEGO, PKI and TLS (post-quantum ML-DSA
@@ -143,7 +144,7 @@ What each group covers:
 | [`oath`](docs/reference/oath.md), [`yubico`](docs/reference/yubico.md) | HOTP and TOTP codes; Yubico OTP decoding and checks |
 | [`spiffe`](docs/reference/spiffe.md) | SPIFFE IDs, X509- and JWT-SVIDs, trust bundles, the Workload API |
 | [`spire`](docs/reference/spire.md) | The SPIRE Server API over the admin socket or mTLS: server, CA and bundle state, entries, agents, federation; minting checked SVIDs; creating and deleting entries and join tokens |
-| [`ssf`](docs/reference/ssf.md) | Shared Signals: discovery, streams, poll and push delivery, Security Event Token checks for CAEP and RISC |
+| [`ssf`](docs/reference/ssf.md) | Shared Signals: discovery, streams, poll and push delivery (a local HTTPS receiver), Security Event Token checks for CAEP and RISC |
 | [`gnap`](docs/reference/gnap.md) | Grants with HTTP message signatures, interaction, continuation, rotation, revocation |
 | [`vci`](docs/reference/vci.md), [`vp`](docs/reference/vp.md) | OID4VCI issuance as a wallet (pre-authorized code, or the authorization code flow); OID4VP requests and presentations of SD-JWT VCs (selective disclosure) and mdocs (only the requested elements, device-signed) |
 | [`xacml`](docs/reference/xacml.md) | XACML 3.0 decisions with a trace, and policy lint |

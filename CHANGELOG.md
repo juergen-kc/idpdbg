@@ -14,6 +14,25 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Changed
+- `ssf receive` serves its push endpoint over HTTPS, as RFC 8935 requires,
+  with a throwaway certificate for localhost whose PEM the result returns
+  for the transmitter to trust, or `--tls-cert`/`--tls-key`. `--tls off`
+  keeps plain HTTP for lenient test transmitters, with a warning.
+
+### Added
+- `ssf discover` reports the transmitter's `spec_version`: SSF 1.0 final,
+  an implementer's draft, or absent (draft 1_0-ID1).
+- `ssf stream` warns before creating a push stream whose `endpoint_url` is
+  not https.
+- Interop tests in CI against SSFgo's conformance transmitter, an
+  independent SSF 1.0 and CAEP implementation.
+
+### Fixed
+- `ssf receive` no longer fails a verification event the transmitter sent
+  on its own (without a `state`); it checks that its own verification
+  event arrived instead.
+
 ## [0.34.1] - 2026-11-24
 
 ### Changed

@@ -24,8 +24,9 @@ go test ./...
 ## Interop tests
 
 Interop tests run idpdbg against a real Keycloak, a Samba AD domain
-controller, an MIT Kerberos KDC, a SCIM server and a SPIRE server (in CI on
-every push, and locally with Docker):
+controller, an MIT Kerberos KDC, a SCIM server, a SPIRE server and a Shared
+Signals transmitter (in CI on every push, and locally with Docker, or Go for
+the transmitter):
 
 ```bash
 scripts/keycloak.sh
@@ -45,6 +46,10 @@ scripts/scim.sh
 
 ```bash
 scripts/spire.sh
+```
+
+```bash
+scripts/ssf.sh
 ```
 
 ```bash
@@ -122,6 +127,6 @@ behind, so run it after changing an operation.
 | `ocsp.go`, `crl.go` | OCSP requests and response validation; CRL download and validation |
 | `crl_ldap.go` | CRLs from ldap(s) distribution points; delta CRLs |
 | `pki.go`, `tlsprobe.go`, `mldsa_keys.go` | X.509 decoding, chain verification, a test CA (ML-DSA included); the TLS probe; ML-DSA private keys in every PKCS #8 form |
-| `*_test.go` | Tests: mock OpenID providers (one strict about PAR/JAR/DPoP/private_key_jwt), mock SAML IdPs for SLO and artifacts, an in-process LDAP server, a mock SCIM server, an emulated PIV/OpenPGP token, an emulated CTAP2/U2F security key (also behind an emulated NFC reader and an emulated Windows WebAuthn API), an emulated OpenPGP card, an MCP client; OpenSSL-made ML-DSA certificates and keys in `testdata/pq`; `IDPDBG_HW_TEST=1` also runs WebAuthn with a real key (touch needed); `interop_*_test.go` (build tag `interop`) run against Keycloak (with a scripted browser), a Samba AD domain controller, an MIT KDC, i2scim and a SPIRE server; the SPIRE unit tests use an in-process fake SPIRE server |
+| `*_test.go` | Tests: mock OpenID providers (one strict about PAR/JAR/DPoP/private_key_jwt), mock SAML IdPs for SLO and artifacts, an in-process LDAP server, a mock SCIM server, an emulated PIV/OpenPGP token, an emulated CTAP2/U2F security key (also behind an emulated NFC reader and an emulated Windows WebAuthn API), an emulated OpenPGP card, an MCP client; OpenSSL-made ML-DSA certificates and keys in `testdata/pq`; `IDPDBG_HW_TEST=1` also runs WebAuthn with a real key (touch needed); `interop_*_test.go` (build tag `interop`) run against Keycloak (with a scripted browser), a Samba AD domain controller, an MIT KDC, i2scim, a SPIRE server and SSFgo's Shared Signals transmitter; the SPIRE unit tests use an in-process fake SPIRE server |
 | `mcp.go` | MCP stdio server |
 | `main.go`, `docs.go` | CLI; the generated command reference in `docs/reference` |

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -237,6 +239,14 @@ func runSSFDiscover(c *Ctx) (M, error) {
 		_, ok := cfg[k]
 		cs.ok(ok, "metadata: "+k, "", ssfRef+" §7.1")
 	}
+	switch v := str(cfg["spec_version"]); {
+	case v == "1_0":
+		cs.add("spec_version", "pass", "1_0: SSF 1.0 final", ssfRef+" §7.1")
+	case v == "":
+		cs.add("spec_version", "info", "absent, which means the transmitter follows implementer's draft 1_0-ID1", ssfRef+" §7.1")
+	default:
+		cs.add("spec_version", "info", v+": an implementer's draft, not SSF 1.0 final (1_0); details may differ", ssfRef+" §7.1")
+	}
 	dm, _ := coerce(Param{Name: "d", Type: "list"}, cfg["delivery_methods_supported"], false)
 	methods, _ := dm.([]string)
 	for _, m := range methods {
@@ -309,6 +319,8 @@ func runSSFStream(c *Ctx) (M, error) {
 			if c.Str("endpoint_url") == "" {
 				return out, errors.New("push delivery needs endpoint_url (where the transmitter should POST events)")
 			}
+			cs.warn(strings.HasPrefix(strings.ToLower(c.Str("endpoint_url")), "https://"), "push endpoint_url uses https",
+				listDetail("TLS MUST protect pushed SETs, so transmitters that follow RFC 8935 refuse this: ", []string{c.Str("endpoint_url")}, ""), "RFC 8935 §5.3")
 			d := M{"method": ssfPush, "endpoint_url": c.Str("endpoint_url")}
 			if a := c.Str("push_authorization"); a != "" {
 				d["authorization_header"] = a
@@ -498,6 +510,15 @@ func runSSFPoll(c *Ctx) (M, error) {
 	return out, nil
 }
 
+// mustParseCert parses a certificate idpdbg made itself.
+func mustParseCert(der []byte) *x509.Certificate {
+	c, err := x509.ParseCertificate(der)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 func runSSFReceive(c *Ctx) (M, error) {
 	keys, direct, _, err := ssfKeys(c, c.Str("issuer"))
 	if err != nil {
@@ -523,15 +544,42 @@ func runSSFReceive(c *Ctx) (M, error) {
 		default:
 		}
 	})
-	stop, err := serveLoopback(port, mux)
+	// RFC 8935 §5.3: TLS MUST protect pushed SETs, and the transmitter
+	// checks the receiver's certificate. A throwaway certificate for
+	// localhost by default (the transmitter has to be told to trust it), the
+	// person's own, or plain HTTP for a lenient test transmitter.
+	var cs Checks
+	out := M{}
+	var cert *tls.Certificate
+	scheme := "https"
+	switch {
+	case c.Str("tls_cert") != "":
+		pair, err := tls.X509KeyPair([]byte(c.Str("tls_cert")), []byte(c.Str("tls_key")))
+		if err != nil {
+			return nil, fmt.Errorf("tls_cert/tls_key: %w", err)
+		}
+		cert = &pair
+	case c.Str("tls") == "off":
+		scheme = "http"
+		cs.add("push endpoint uses TLS", "warn", "plain HTTP: RFC 8935 requires TLS, so only a lenient test transmitter will push here", "RFC 8935 §5.3")
+	default:
+		var fp string
+		var err error
+		if cert, fp, err = loopbackCert(); err != nil {
+			return nil, err
+		}
+		out["tls_certificate_pem"] = certPEM(mustParseCert(cert.Certificate[0]))
+		out["tls_certificate_sha256"] = fp
+		c.Log("The push endpoint uses a throwaway self-signed certificate for localhost (SHA-256 %s, PEM in tls_certificate_pem): the transmitter must trust it", fp)
+	}
+	stop, err := serveLoopbackTLS(port, mux, cert)
 	if err != nil {
 		return nil, err
 	}
 	defer stop()
-	endpoint := fmt.Sprintf("http://localhost:%d%s", port, path)
+	endpoint := fmt.Sprintf("%s://localhost:%d%s", scheme, port, path)
 	c.Log("Push receiver listening on %s (the transmitter must be able to reach it)", endpoint)
-	var cs Checks
-	out := M{"endpoint": endpoint}
+	out["endpoint"] = endpoint
 	defer func() { out["checks"] = cs }()
 	if c.Bool("trigger_verification") {
 		cfg, _, err := ssfConfig(c, c.Str("issuer"))
@@ -547,6 +595,7 @@ func runSSFReceive(c *Ctx) (M, error) {
 		out["verification_state"] = state
 	}
 	var got []M
+	ourVerification := false
 	deadline := time.After(time.Duration(c.Int("wait")) * time.Second)
 loop:
 	for len(got) < c.Int("max_events") {
@@ -555,10 +604,19 @@ loop:
 			var sc Checks
 			sc.ok(strings.HasPrefix(a.ctype, "application/secevent+jwt"), "Content-Type is application/secevent+jwt", a.ctype, "RFC 8935 §2")
 			d := checkSET(&sc, a.token, keys, direct, c.Str("issuer"), c.Str("audience"))
-			if st := str(out["verification_state"]); st != "" && d != nil {
+			if d != nil {
 				if cl, _ := d["claims"].(M); cl != nil {
 					if ev, _ := cl["events"].(map[string]any)[ssfEvBase+"verification"].(map[string]any); ev != nil {
-						sc.ok(str(ev["state"]) == st, "verification event echoes our state", "", ssfRef+" §8.1.4.1")
+						// A transmitter may also verify a stream on its own,
+						// without a state; only an answer to our request
+						// carries one.
+						switch st := str(out["verification_state"]); {
+						case ev["state"] == nil:
+							sc.add("verification event", "info", "sent by the transmitter on its own (no state)", ssfRef+" §8.1.4")
+						case st != "":
+							ourVerification = ourVerification || str(ev["state"]) == st
+							sc.ok(str(ev["state"]) == st, "verification event echoes our state", "state="+str(ev["state"]), ssfRef+" §8.1.4")
+						}
 					}
 				}
 			}
@@ -576,6 +634,13 @@ loop:
 	}
 	out["received"] = got
 	cs.ok(len(got) > 0, "events received", fmt.Sprintf("%d SET(s) in %ds", len(got), c.Int("wait")), "RFC 8935 §2")
+	if str(out["verification_state"]) != "" && len(got) > 0 {
+		detail := "state " + str(out["verification_state"]) + " echoed"
+		if !ourVerification {
+			detail = "no verification event with state " + str(out["verification_state"]) + " among the SETs received (raise max_events or wait)"
+		}
+		cs.ok(ourVerification, "our verification event arrived", detail, ssfRef+" §8.1.4")
+	}
 	return out, nil
 }
 
@@ -636,6 +701,9 @@ func init() {
 				{Name: "stream_id", Type: "string", Desc: "Stream to verify"},
 				{Name: "trigger_verification", Type: "bool", Desc: "Ask the transmitter to send a verification event first"},
 				{Name: "port", Type: "int", Desc: "Loopback port", Default: 8768},
+				{Name: "tls", Type: "string", Enum: []string{"self_signed", "off"}, Default: "self_signed", Desc: "TLS for the push endpoint (RFC 8935 requires it): a throwaway self-signed certificate for localhost, whose PEM the result returns for the transmitter to trust; off for plain HTTP to a lenient test transmitter"},
+				{Name: "tls_cert", Type: "string", Path: true, Desc: "Instead: the push endpoint's certificate chain (PEM)"},
+				{Name: "tls_key", Type: "string", Path: true, Desc: "Its private key (PEM)"},
 				{Name: "path", Type: "string", Desc: "Path", Default: "/ssf/events"},
 				{Name: "expected_authorization", Type: "string", Desc: "Authorization header value to require from the transmitter"},
 				{Name: "max_events", Type: "int", Desc: "Stop after this many events", Default: 1},

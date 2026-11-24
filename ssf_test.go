@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -126,7 +127,10 @@ func newMockTransmitter(t *testing.T) *mockTransmitter {
 				pr, _ := http.NewRequest("POST", str(d["endpoint_url"]), bytes.NewBufferString(tok))
 				pr.Header.Set("Content-Type", "application/secevent+jwt")
 				pr.Header.Set("Authorization", str(d["authorization_header"]))
-				if resp, err := http.DefaultClient.Do(pr); err == nil {
+				// The receiver's throwaway certificate is not one this test
+				// can know up front; a real transmitter is told to trust it.
+				push := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test transmitter
+				if resp, err := push.Do(pr); err == nil {
 					resp.Body.Close()
 				}
 			}()
@@ -192,7 +196,8 @@ func TestSSF(t *testing.T) {
 	t.Run("push stream with verification", func(t *testing.T) {
 		port := freePort(t)
 		created := run(t, "ssf.stream", with(M{"action": "create", "delivery": "push", "events": []string{caepBase + "session-revoked"},
-			"endpoint_url": fmt.Sprintf("http://localhost:%d/ssf/events", port), "push_authorization": "Bearer recv"}), nil)
+			"endpoint_url": fmt.Sprintf("https://localhost:%d/ssf/events", port), "push_authorization": "Bearer recv"}), nil)
+		wantStatus(t, created, "push endpoint_url uses https", "pass")
 		sid := str(created["response"].(map[string]any)["stream_id"])
 		res := run(t, "ssf.receive", with(M{"stream_id": sid, "trigger_verification": true, "port": port, "expected_authorization": "Bearer recv",
 			"audience": "https://receiver.example", "wait": 5}), nil)
@@ -200,6 +205,21 @@ func TestSSF(t *testing.T) {
 		for _, n := range []string{"verification requested", "SET 1: SET signature", "verification event echoes our state", "Content-Type is application/secevent+jwt"} {
 			wantStatus(t, res, n, "pass")
 		}
+		if !strings.HasPrefix(str(res["endpoint"]), "https://") || !strings.Contains(str(res["tls_certificate_pem"]), "BEGIN CERTIFICATE") {
+			t.Errorf("push endpoint without TLS: %v %v", res["endpoint"], res["tls_certificate_pem"])
+		}
+
+		// Plain HTTP only when asked, and flagged both when the stream is
+		// made and when it receives.
+		port = freePort(t)
+		plain := run(t, "ssf.stream", with(M{"action": "create", "delivery": "push", "events": []string{caepBase + "session-revoked"},
+			"endpoint_url": fmt.Sprintf("http://localhost:%d/ssf/events", port)}), nil)
+		wantStatus(t, plain, "push endpoint_url uses https", "warn")
+		sid = str(plain["response"].(map[string]any)["stream_id"])
+		res = run(t, "ssf.receive", with(M{"stream_id": sid, "trigger_verification": true, "port": port, "tls": "off",
+			"audience": "https://receiver.example", "wait": 5}), nil)
+		wantStatus(t, res, "push endpoint uses TLS", "warn")
+		wantStatus(t, res, "SET 1: SET signature", "pass")
 	})
 
 	t.Run("a stored token only goes to the transmitter's origin", func(t *testing.T) {

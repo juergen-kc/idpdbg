@@ -96,6 +96,18 @@ is in [development.md](development.md#interop-tests).
   Active Directory's AS-REP nonce, and encrypts the public-key reply with
   3DES although AES was offered. It sends PA_PKINIT_KX only for anonymous
 PKINIT, although RFC 8062 says it should with Diffie-Hellman too.
+- SSFgo 0.4.2's conformance transmitter, an independent SSF 1.0 and CAEP
+  implementation, in CI on every push (`interop_ssf_test.go`, set up by
+  `scripts/ssf.sh`, pinned in `testdata/ssf`). It covers discovery of an
+  issuer with a path, poll and push streams, verification, the three CAEP
+  events of the interoperability profile with `iss_sub`, `email` and
+  `opaque` subjects, acknowledgement, stream status and subjects, a wrong
+  audience, token and stream refused, and deletion. It requires an https
+  push endpoint, as RFC 8935 does, which `ssf receive` had not offered, and
+  verifies a new stream on its own with a verification event that has no
+  `state`, which `ssf receive` had mistaken for a wrong answer to its own
+  request. By hand, `ssf discover` against the public test transmitter
+  ssf.caep.dev, which announces implementer's draft `1_0-ID2`.
 - SPIRE 1.16, a server with one agent attested by join token, in CI on
   every push (`interop_spire_test.go`, set up by `scripts/spire.sh`). It
   covers the server API over mTLS with an admin X509-SVID (server, CA and

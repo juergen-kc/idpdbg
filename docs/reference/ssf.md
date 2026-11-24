@@ -73,6 +73,9 @@ MCP tool: `ssf_receive`. **Changes data at the remote system.**
 | `--stream-id` | string | Stream to verify. |
 | `--trigger-verification` | bool | Ask the transmitter to send a verification event first. |
 | `--port` | int | Loopback port. Default `8768`. |
+| `--tls` | string | TLS for the push endpoint (RFC 8935 requires it): a throwaway self-signed certificate for localhost, whose PEM the result returns for the transmitter to trust; off for plain HTTP to a lenient test transmitter. Default `self_signed`. One of `self_signed`, `off`. |
+| `--tls-cert` | string | Instead: the push endpoint's certificate chain (PEM). May be a file path (CLI or profile only). |
+| `--tls-key` | string | Its private key (PEM). May be a file path (CLI or profile only). |
 | `--path` | string | Path. Default `/ssf/events`. |
 | `--expected-authorization` | string | Authorization header value to require from the transmitter. |
 | `--max-events` | int | Stop after this many events. Default `1`. |
