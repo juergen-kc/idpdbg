@@ -212,7 +212,7 @@ func runTLSProbe(c *Ctx) (M, error) {
 	if !cs.ok(herr == nil, "handshake", detailOr(herr, "completed"), "RFC 8446 §4") {
 		if msg := herr.Error(); !req.Requested && (strings.Contains(msg, "EOF") || strings.Contains(msg, "protocol version") || strings.Contains(msg, "handshake failure")) {
 			cs.add("handshake failure cause", "info", "the server ended the handshake without saying why. Usually it only offers legacy TLS versions or cipher suites (TLS 1.0, RC4, 3DES, finite-field DHE) that this client no longer implements; cross-check with: openssl s_client -connect "+net.JoinHostPort(t.Host, t.Port)+" -tls1. "+
-				"Or its certificate chain is signed with ML-DSA: Go's TLS client (which idpdbg uses) offers ML-DSA for the handshake signature but not in signature_algorithms_cert, and OpenSSL then refuses; cross-check with: openssl s_client -connect "+net.JoinHostPort(t.Host, t.Port)+" -tls1_3", "RFC 8996, RFC 8446 §4.2.3")
+				"Or its certificate chain is signed with ML-DSA: Go 1.27's TLS client (which idpdbg uses) offers ML-DSA for the handshake signature but, as a workaround for middleboxes, not in signature_algorithms_cert, and OpenSSL then refuses (golang/go#82536; Go 1.28 drops that extension). Cross-check with: openssl s_client -connect "+net.JoinHostPort(t.Host, t.Port)+" -tls1_3", "RFC 8996, RFC 8446 §4.2.3")
 		}
 		if len(st.PeerCertificates) == 0 {
 			return out, nil

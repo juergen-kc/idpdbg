@@ -14,6 +14,11 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Changed
+- The `tls probe` hint about ML-DSA-signed chains now says it is a
+  deliberate Go 1.27 workaround for TLS-inspecting middleboxes
+  (golang/go#82536) that Go 1.28 ends.
+
 ## [0.32.0] - 2026-11-24
 
 ### Added
