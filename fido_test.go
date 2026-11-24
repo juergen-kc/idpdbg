@@ -52,9 +52,9 @@ type fakeKey struct {
 	cmV21, cmPreview bool
 	// over NFC (ctapnfc_test.go)
 	nfcMode, nfcWaiting bool
-	cmLie            bool // getCredsMetadata miscounts
-	tokPerms         int64
-	cmQueue          [][]byte
+	cmLie               bool // getCredsMetadata miscounts
+	tokPerms            int64
+	cmQueue             [][]byte
 }
 
 type fakeRK struct {
