@@ -385,8 +385,17 @@ func TestSPIREStoredKeyGuard(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "refusing") {
 		t.Errorf("profile server: %v", err)
 	}
-	if o, a := spireOrigin("[::1]:8081"); o != "spire://::1:8081" || a != "[::1]:8081" {
-		t.Errorf("IPv6: %s %s", o, a)
+	for in, want := range map[string][2]string{
+		"[::1]:8081":              {"spire://::1:8081", "[::1]:8081"},
+		"Spire.Example":           {"spire://spire.example:8081", "spire.example:8081"},
+		"https://spire.example:9": {"spire://spire.example:9", "spire.example:9"},
+		"unix:8081":               {"spire://unix:8081", "unix:8081"}, // a host named unix, dialled as dns:///unix:8081
+		"evil.example:80x":        {}, "a@evil.example:8081": {}, "evil.example:0": {}, "evil.example:08081": {},
+		"https://u@evil.example": {}, "https://evil.example/x": {}, "evil_example:1": {}, "": {},
+	} {
+		if o, a := spireOrigin(in); o != want[0] || a != want[1] {
+			t.Errorf("spireOrigin(%q) = %q, %q; want %q, %q", in, o, a, want[0], want[1])
+		}
 	}
 	if !findOp("spire.mint").Mutating {
 		t.Error("spire.mint is marked read-only, yet issues credentials")

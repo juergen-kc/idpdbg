@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -163,7 +164,7 @@ func spireDial(c *Ctx, cs *Checks, out M) (*spireClient, error) {
 	default:
 		tlsConf = tlsconfig.MTLSClientConfig(src, bundles, tlsconfig.AuthorizeID(serverID))
 	}
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(tlsConf)))
+	conn, err := grpc.NewClient("dns:///"+addr, grpc.WithTransportCredentials(credentials.NewTLS(tlsConf)))
 	if err != nil {
 		return fail(err)
 	}
@@ -201,21 +202,44 @@ func listDetail(prefix string, items []string, sep string) string {
 }
 
 // spireOrigin is spire://host:port for a server written as host[:port] or
-// as a URL, and the address to dial; "" when it names no host.
+// as a URL, and the address to dial; "" when it is not a plain host name or
+// IP address with a numeric port. The origin is built from exactly what is
+// dialled, so the destination check and the connection cannot disagree.
 func spireOrigin(s string) (origin, addr string) {
 	s = strings.TrimSpace(s)
 	if u, err := url.Parse(s); err == nil && u.Scheme != "" && u.Host != "" {
+		if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+			return "", ""
+		}
 		s = u.Host
 	}
 	host, port, err := net.SplitHostPort(s)
 	if err != nil {
-		host, port = strings.Trim(s, "[]"), "8081"
+		host, port = strings.TrimSuffix(strings.TrimPrefix(s, "["), "]"), "8081"
 	}
-	if host == "" || strings.ContainsAny(host, "/@?#[]") {
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != port {
 		return "", ""
 	}
-	addr = net.JoinHostPort(host, port)
-	return targetOrigin("spire://" + addr), addr
+	host = strings.ToLower(host)
+	if ip := net.ParseIP(host); ip != nil {
+		host = ip.String()
+	} else if !validHostname(host) {
+		return "", ""
+	}
+	return "spire://" + host + ":" + port, net.JoinHostPort(host, port)
+}
+
+// validHostname is a DNS name: letters, digits, hyphens and dots only.
+func validHostname(h string) bool {
+	if h == "" || len(h) > 253 || strings.HasPrefix(h, ".") || strings.HasPrefix(h, "-") {
+		return false
+	}
+	for _, r := range h {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 func spiffeIDOf(id *types.SPIFFEID) string {
