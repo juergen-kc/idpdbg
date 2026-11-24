@@ -34,6 +34,15 @@ func isMdocCredential(s string) bool {
 	return err == nil && mapOf(v)["issuerAuth"] != nil
 }
 
+// pathElem is element i of a DCQL claims path, if it is a string.
+func pathElem(path []any, i int) (string, bool) {
+	if i >= len(path) {
+		return "", false
+	}
+	s, ok := path[i].(string)
+	return s, ok
+}
+
 // oid4vpSessionTranscript builds the SessionTranscript of OID4VP 1.0
 // Appendix B.2.6.1: [null, null, ["OpenID4VPHandover", SHA-256 of
 // [client_id, nonce, jwkThumbprint or null, response_uri]]].
@@ -78,17 +87,26 @@ func presentMdoc(c *Ctx, cs *Checks, out M, r *vpRequest, cred string) ([]byte, 
 	}
 
 	// Only the requested elements.
+	// Everything is sent only when the query names no claims at all; a
+	// claim that is not [namespace, element] is unusable, never a reason
+	// to send more.
 	want := map[string]bool{}
-	if cl, ok := query["claims"].([]any); ok {
-		for _, x := range cl {
-			xm, _ := x.(map[string]any)
-			path, _ := xm["path"].([]any)
-			if len(path) == 2 {
-				want[str(path[0])+"/"+str(path[1])] = true
-				if xm["intent_to_retain"] == true {
-					cs.add("verifier intends to retain "+str(path[1]), "info", "intent_to_retain is set for this element", vpRef+" §6.3")
-				}
-			}
+	var unusable []string
+	cl, _ := query["claims"].([]any)
+	all := len(cl) == 0
+	for _, x := range cl {
+		xm, _ := x.(map[string]any)
+		path, _ := xm["path"].([]any)
+		ns, _ := pathElem(path, 0)
+		el, ok := pathElem(path, 1)
+		if len(path) != 2 || ns == "" || !ok || el == "" {
+			b, _ := json.Marshal(xm["path"])
+			unusable = append(unusable, "path "+string(b)+" is not [namespace, element]")
+			continue
+		}
+		want[ns+"/"+el] = true
+		if xm["intent_to_retain"] == true {
+			cs.add("verifier intends to retain "+el, "info", "intent_to_retain is set for this element", vpRef+" §6.3")
 		}
 	}
 	nsMap := mapOf(is["nameSpaces"])
@@ -101,7 +119,7 @@ func presentMdoc(c *Ctx, cs *Checks, out M, r *vpRequest, cred string) ([]byte, 
 		var keep []any
 		for _, it := range items {
 			name := fmt.Sprint(mapOf(it)["elementIdentifier"])
-			if len(want) == 0 || want[ns+"/"+name] {
+			if all || want[ns+"/"+name] {
 				keep = append(keep, it)
 				sent = append(sent, ns+"/"+name)
 				found[ns+"/"+name] = true
@@ -113,10 +131,10 @@ func presentMdoc(c *Ctx, cs *Checks, out M, r *vpRequest, cred string) ([]byte, 
 			sel[nsKey] = keep
 		}
 	}
-	if len(want) == 0 {
+	if all {
 		cs.add("data minimisation", "info", "the query names no claims, so every element is sent", vpRef+" §6.1")
 	}
-	var missing []string
+	missing := unusable
 	for k := range want {
 		if !found[k] {
 			missing = append(missing, k)

@@ -214,8 +214,11 @@ func newMockVerifier(t *testing.T, issuer string) *mockVerifier {
 			"dcql_query": M{"credentials": []M{{"id": "pid", "format": "dc+sd-jwt", "meta": M{"vct_values": []string{"urn:eudi:pid:1"}},
 				"claims": []M{{"path": []any{"given_name"}}, {"path": []any{"nationalities", nil}}}}}}}
 		if mdoc {
-			claims["dcql_query"] = M{"credentials": []M{{"id": "mdl", "format": "mso_mdoc", "meta": M{"doctype_value": "org.iso.18013.5.1.mDL"},
-				"claims": []M{{"path": []any{"org.iso.18013.5.1", "family_name"}}, {"path": []any{"org.iso.18013.5.1", "age_over_18"}, "intent_to_retain": false}}}}}
+			cl := []M{{"path": []any{"org.iso.18013.5.1", "family_name"}}, {"path": []any{"org.iso.18013.5.1", "age_over_18"}, "intent_to_retain": false}}
+			if r.URL.Query().Get("bad_claims") != "" { // paths that are not [namespace, element]
+				cl = []M{{"path": []any{"org.iso.18013.5.1", "family_name", "extra"}}, {"path": "org.iso.18013.5.1/age_over_18"}}
+			}
+			claims["dcql_query"] = M{"credentials": []M{{"id": "mdl", "format": "mso_mdoc", "meta": M{"doctype_value": "org.iso.18013.5.1.mDL"}, "claims": cl}}}
 		}
 		if mode == "direct_post.jwt" {
 			ek, _ := publicJWK(v.encKey.Public())
@@ -415,6 +418,18 @@ func TestVerifiableCredentials(t *testing.T) {
 			// Another key is not the device key.
 			args["holder_key"] = holder
 			wantStatus(t, run(t, "vp.present", args, nil), "holder_key is the MSO's device key", "fail")
+			// Claims that cannot be read never widen what is sent: nothing goes.
+			args["holder_key"] = mdlHolder
+			args["request"] = "openid4vp://?client_id=" + url.QueryEscape("x509_san_dns:localhost") + "&request_uri=" + url.QueryEscape(v.base+"/request/mdoc-"+mode+"?bad_claims=1")
+			before := len(v.received)
+			bad := run(t, "vp.present", args, nil)
+			wantStatus(t, bad, "every requested claim is available", "fail")
+			if c := checkOf(bad, "every requested claim is available"); !strings.Contains(c.Detail, "not [namespace, element]") {
+				t.Errorf("unusable claims: %s", c.Detail)
+			}
+			if bad["vp_token"] != nil || len(v.received) != before {
+				t.Error("a presentation was sent for unreadable claims")
+			}
 		})
 	}
 
