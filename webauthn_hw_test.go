@@ -14,6 +14,10 @@ func TestWebAuthnSecurityKey(t *testing.T) {
 	if os.Getenv("IDPDBG_HW_TEST") != "1" {
 		t.Skip("set IDPDBG_HW_TEST=1 with a security key connected")
 	}
+	if realPlatformAPI != nil { // on Windows: through the Windows WebAuthn API
+		platformAPI = realPlatformAPI
+		t.Cleanup(func() { platformAPI = nil })
+	}
 	rp := newTestRP(t)
 	touch := func(what string) { fmt.Fprintf(os.Stderr, ">>> touch the key: %s\n", what) }
 	base := func(extra M) M {

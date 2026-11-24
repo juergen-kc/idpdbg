@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -142,13 +143,16 @@ type wanAssertion struct {
 
 type windowsWebAuthn struct{ version uint32 }
 
-func init() {
+// A variable initializer, not init, so that it has run before any init
+// function (the tests' included) looks at platformAPI.
+var _ = func() bool {
 	if modWebAuthn.Load() != nil || procGetAPIVersion.Find() != nil {
-		return // Windows before 10 1903: no API, so security keys need administrator rights
+		return false // Windows before 10 1903: no API, so security keys need administrator rights
 	}
 	v, _, _ := procGetAPIVersion.Call()
 	platformAPI = &windowsWebAuthn{version: uint32(v)}
-}
+	return true
+}()
 
 func (w *windowsWebAuthn) Name() string {
 	return fmt.Sprintf("the Windows WebAuthn API (version %d)", w.version)
@@ -200,6 +204,27 @@ func wanError(hr uintptr) error {
 	return fmt.Errorf("%s (0x%08X)", name, uint32(hr))
 }
 
+// callWithin runs a WebAuthn API call, giving up when Windows has not
+// answered by the ceremony's timeout and a grace period: with nobody at a
+// desktop to answer its dialog, the API can wait forever. The abandoned
+// call stays blocked until the process ends.
+func callWithin(timeout time.Duration, call func() uintptr) (uintptr, error) {
+	if window() == 0 {
+		return 0, errors.New("no window to show the Windows security dialog on: run idpdbg in a signed-in desktop session, or pass a device from fido.devices (which needs administrator rights)")
+	}
+	done := make(chan uintptr, 1)
+	go func() {
+		runtime.LockOSThread()
+		done <- call()
+	}()
+	select {
+	case hr := <-done:
+		return hr, nil
+	case <-time.After(timeout + 15*time.Second):
+		return 0, errors.New("the Windows WebAuthn API did not answer in time: is someone at the desktop to answer its dialog?")
+	}
+}
+
 func wanUV(p string) uint32 {
 	switch p {
 	case "required":
@@ -240,22 +265,29 @@ func (w *windowsWebAuthn) MakeCredential(r platformCreate) (*platformAttestation
 	}
 	opts := &wanMakeCredentialOptions{Version: 1, TimeoutMilliseconds: uint32(r.Timeout.Milliseconds()), CredentialList: wanCredList(r.Exclude, typ),
 		Attachment: wanAttachmentCrossPlatform, RequireResidentKey: rk, UserVerification: wanUV(r.UserVerification), Attestation: wanAttestationDirect}
-	var res *wanCredentialAttestation
-	hr, _, _ := procMakeCredential.Call(window(), uintptr(unsafe.Pointer(rp)), uintptr(unsafe.Pointer(user)), uintptr(unsafe.Pointer(cp)),
-		uintptr(unsafe.Pointer(cd)), uintptr(unsafe.Pointer(opts)), uintptr(unsafe.Pointer(&res)))
-	runtime.KeepAlive(params)
-	runtime.KeepAlive(r)
+	res := new(*wanCredentialAttestation)
+	hr, err := callWithin(r.Timeout, func() uintptr {
+		hr, _, _ := procMakeCredential.Call(window(), uintptr(unsafe.Pointer(rp)), uintptr(unsafe.Pointer(user)), uintptr(unsafe.Pointer(cp)),
+			uintptr(unsafe.Pointer(cd)), uintptr(unsafe.Pointer(opts)), uintptr(unsafe.Pointer(res)))
+		runtime.KeepAlive(params)
+		runtime.KeepAlive(r)
+		return hr
+	})
+	if err != nil {
+		return nil, err
+	}
 	if hr != 0 {
 		return nil, wanError(hr)
 	}
-	if res == nil {
+	if *res == nil {
 		return nil, errors.New("the Windows WebAuthn API returned no credential")
 	}
-	defer procFreeCredentialAttestation.Call(uintptr(unsafe.Pointer(res)))
-	out := &platformAttestation{Format: windows.UTF16PtrToString(res.FormatType), AuthData: goBytes(res.AuthData, res.AuthDataLen),
-		AttStmtRaw: goBytes(res.Attestation, res.AttestationLen)}
-	if res.Version >= 3 {
-		out.Transport = map[uint32]string{1: "usb", 2: "nfc", 4: "ble", 8: "test", 0x10: "internal", 0x20: "hybrid"}[res.UsedTransport]
+	att := *res
+	defer procFreeCredentialAttestation.Call(uintptr(unsafe.Pointer(att)))
+	out := &platformAttestation{Format: windows.UTF16PtrToString(att.FormatType), AuthData: goBytes(att.AuthData, att.AuthDataLen),
+		AttStmtRaw: goBytes(att.Attestation, att.AttestationLen)}
+	if att.Version >= 3 {
+		out.Transport = map[uint32]string{1: "usb", 2: "nfc", 4: "ble", 8: "test", 0x10: "internal", 0x20: "hybrid"}[att.UsedTransport]
 	}
 	return out, nil
 }
@@ -265,16 +297,24 @@ func (w *windowsWebAuthn) GetAssertion(r platformGet) (*platformAssertion, error
 	cd := &wanClientData{Version: 1, JSONLen: uint32(len(r.ClientDataJSON)), JSON: bytesPtr(r.ClientDataJSON), HashAlg: wstr("SHA-256")}
 	opts := &wanGetAssertionOptions{Version: 1, TimeoutMilliseconds: uint32(r.Timeout.Milliseconds()), CredentialList: wanCredList(r.Allow, typ),
 		Attachment: wanAttachmentCrossPlatform, UserVerification: wanUV(r.UserVerification)}
-	var res *wanAssertion
-	hr, _, _ := procGetAssertion.Call(window(), uintptr(unsafe.Pointer(wstr(r.RPID))), uintptr(unsafe.Pointer(cd)), uintptr(unsafe.Pointer(opts)),
-		uintptr(unsafe.Pointer(&res)))
-	runtime.KeepAlive(r)
+	rpID := wstr(r.RPID)
+	resp := new(*wanAssertion)
+	hr, err := callWithin(r.Timeout, func() uintptr {
+		hr, _, _ := procGetAssertion.Call(window(), uintptr(unsafe.Pointer(rpID)), uintptr(unsafe.Pointer(cd)), uintptr(unsafe.Pointer(opts)),
+			uintptr(unsafe.Pointer(resp)))
+		runtime.KeepAlive(r)
+		return hr
+	})
+	if err != nil {
+		return nil, err
+	}
 	if hr != 0 {
 		return nil, wanError(hr)
 	}
-	if res == nil {
+	if *resp == nil {
 		return nil, errors.New("the Windows WebAuthn API returned no assertion")
 	}
+	res := *resp
 	defer procFreeAssertion.Call(uintptr(unsafe.Pointer(res)))
 	return &platformAssertion{CredID: goBytes(res.Credential.ID, res.Credential.IDLen), AuthData: goBytes(res.AuthData, res.AuthDataLen),
 		Signature: goBytes(res.Sig, res.SigLen), UserHandle: goBytes(res.UserID, res.UserIDLen)}, nil

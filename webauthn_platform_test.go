@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+// Tests never reach the real Windows WebAuthn API, which would wait for a
+// dialog; only the hardware test (IDPDBG_HW_TEST=1) puts it back.
+var realPlatformAPI platformAuthenticator
+
+func init() { realPlatformAPI, platformAPI = platformAPI, nil }
+
 // fakePlatform plays the Windows WebAuthn API in front of a fakeKey: it
 // hashes the client data, asks the key, and for a passkey sign-in "picks"
 // the first account, as the Windows dialog lets the person do.
@@ -79,9 +85,9 @@ func useFakePlatform(t *testing.T, k *fakeKey) *fakePlatform {
 }
 
 func TestWebAuthnThroughWindowsAPI(t *testing.T) {
-	p := useFakePlatform(t, newFakeKey(t, false))
 	direct := newFakeKey(t, false) // a key on USB, used only when a device is named
 	useFakeKey(t, direct)
+	p := useFakePlatform(t, newFakeKey(t, false))
 	rp := newTestRP(t)
 
 	reg := run(t, "webauthn.register", M{"server": rp.url, "username": "win", "authenticator": "usb", "pin": "123456"}, nil)

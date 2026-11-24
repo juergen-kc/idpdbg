@@ -301,8 +301,11 @@ func (k *fakeKey) u2f(apdu []byte) []byte {
 
 // useFakeKey points device discovery at k for the rest of the test.
 func useFakeKey(t *testing.T, k *fakeKey) {
-	enum, open, why := hidEnumerate, hidOpen, hidUnavailable
-	t.Cleanup(func() { hidEnumerate, hidOpen, hidUnavailable = enum, open, why })
+	enum, open, why, plat := hidEnumerate, hidOpen, hidUnavailable, platformAPI
+	t.Cleanup(func() { hidEnumerate, hidOpen, hidUnavailable, platformAPI = enum, open, why, plat })
+	// The key is on USB: on Windows the ceremony must not go to the real
+	// Windows WebAuthn API, which would wait for a dialog.
+	platformAPI = nil
 	hidEnumerate = func() ([]hidInfo, error) {
 		return []hidInfo{{Path: "fake:0", VendorID: 0x1234, ProductID: 0x5678, Manufacturer: "Test", Product: "Fake Key"}}, nil
 	}
