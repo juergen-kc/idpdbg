@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-24
+
 ### Added
 - `mdoc decode` verifies device authentication when given the session
   transcript (`--session-transcript`): the device signature with the MSO's
@@ -621,7 +623,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/juergen-kc/idpdbg/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/juergen-kc/idpdbg/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/juergen-kc/idpdbg/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/juergen-kc/idpdbg/compare/v0.25.0...v0.26.0
