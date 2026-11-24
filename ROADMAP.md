@@ -46,6 +46,22 @@ Legacy or niche: planned when someone needs them.
   Go's standard library supports them
 - The Digital Credentials API: it is a browser API, so idpdbg could at most
   build and check the verifier's side
+- Shared Signals as a transmitter, to test receivers (push events to their
+  endpoint, serve events for them to poll); and judging a transmitter
+  against the CAEP Interoperability Profile, as `--fapi` does for FAPI 2.0
+- OpenPGP cards whose PINs are hashed with a KDF (DO F9)
+- ML-DSA keys in COSE for the software authenticator (passkeys), once
+  relying parties accept them
+- More attestation formats for the software authenticator: TPM, Android
+  and Apple
+- On Windows, the `fido` commands without administrator rights (Windows'
+  WebAuthn API has no credential management for security keys)
+
+Waiting on hardware or an account, not on code:
+
+- FIDO over NFC with a real reader (tested against an emulated reader)
+- Shared Signals streams and events at the public test transmitter
+  ssf.caep.dev, which needs a token from its website
 
 ## Not planned
 

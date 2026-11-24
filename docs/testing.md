@@ -145,8 +145,8 @@ PKINIT, although RFC 8062 says it should with Diffie-Hellman too.
 
 ## Not covered (yet)
 
-The [roadmap](../ROADMAP.md) says which of these are planned, and in which
-order.
+The [roadmap](../ROADMAP.md) lists what would come next, and what is not
+planned.
 
 Compared with the upstream debugger, this version leaves out:
 
@@ -164,5 +164,7 @@ Compared with the upstream debugger, this version leaves out:
 - FAST with cross-realm armor, and FAST factors other than encrypted
   challenge.
 - For SPIRE: banning or deleting agents, CA rotation and federation changes.
+- For Shared Signals: playing the transmitter to test a receiver, and the
+  CAEP Interoperability Profile's extra rules.
 - XACML AttributeSelector (XPath) and ALFA.
 - Composite (hybrid) and SLH-DSA certificates; indirect CRLs.
