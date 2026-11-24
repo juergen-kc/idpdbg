@@ -14,6 +14,20 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- `card openpgp_sign` signs with an OpenPGP card's signature key (PSO:
+  COMPUTE DIGITAL SIGNATURE) or authentication key (INTERNAL
+  AUTHENTICATE), and `card openpgp_decrypt` decrypts with its decryption
+  key (PSO: DECIPHER): RSA, ECDSA and ECDH on P-256, P-384 and P-521,
+  Ed25519 and X25519. Each result is checked against the slot's public key,
+  read from the card without a PIN; that key is checked against the
+  fingerprint the card stores (recomputed as an OpenPGP v4 fingerprint),
+  and a signature against the card's signature counter. Without a
+  ciphertext, decryption is a round trip to the slot's own public key. The
+  user PIN (`--openpgp-pin`, `IDPDBG_OPENPGP_PIN` or a prompt) is tried at
+  most once and never with fewer than two attempts left; cards that hash
+  PINs with a KDF are refused. Tested against an emulated card.
+
 ## [0.29.0] - 2026-11-24
 
 ### Added

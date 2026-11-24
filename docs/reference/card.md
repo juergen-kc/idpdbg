@@ -56,6 +56,36 @@ MCP tool: `card_openpgp`.
 
 Plus the [common parameters](README.md#common-parameters).
 
+## card openpgp_sign
+
+Sign with an OpenPGP card's signature key (PSO: COMPUTE DIGITAL SIGNATURE) or authentication key (INTERNAL AUTHENTICATE), and check the signature with the slot's public key read from the card, that key against the stored fingerprint, and that the signature counter went up. Needs the user PIN (PW1).
+
+MCP tool: `card_openpgp_sign`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `--reader` | string | Reader name or part of it; default the first reader. |
+| `--openpgp-pin` | string | The user PIN (PW1); else IDPDBG_OPENPGP_PIN or a no-echo prompt. Never tried with fewer than 2 attempts left, and never retried. Secret: falls back to `IDPDBG_OPENPGP_PIN`, redacted in traces. |
+| `--slot` | string | Which key. Default `signature`. One of `signature`, `authentication`. |
+| `--message` | string | What to sign (default: a test string). CLI: `@path` reads a file, `-` reads stdin. |
+| `--hash` | string | Hash of the message the card signs. Default `sha256`. One of `sha256`, `sha384`, `sha512`. |
+
+Plus the [common parameters](README.md#common-parameters).
+
+## card openpgp_decrypt
+
+Decrypt with an OpenPGP card's decryption key (PSO: DECIPHER). Without a ciphertext it is a round trip: idpdbg encrypts a random value to the slot's public key (RSA PKCS #1 v1.5, or an ephemeral ECDH key) and checks the card's answer. With one it returns the plaintext (RSA) or the ECDH shared secret. Needs the user PIN (PW1).
+
+MCP tool: `card_openpgp_decrypt`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `--reader` | string | Reader name or part of it; default the first reader. |
+| `--openpgp-pin` | string | The user PIN (PW1); else IDPDBG_OPENPGP_PIN or a no-echo prompt. Never tried with fewer than 2 attempts left, and never retried. Secret: falls back to `IDPDBG_OPENPGP_PIN`, redacted in traces. |
+| `--ciphertext` | string | RSA: the PKCS #1 v1.5 ciphertext; ECDH: the sender's ephemeral public key (hex or base64). Default: a round trip. CLI: `@path` reads a file, `-` reads stdin. |
+
+Plus the [common parameters](README.md#common-parameters).
+
 ## card piv_generate
 
 Generate a key pair in a PIV slot of a smart card or YubiKey (the private key never leaves the card) and return a CSR the card signs, for example with a UPN for smart card logon or PKINIT. Refuses a slot that already holds a certificate unless overwrite is set. Needs the management key and the PIN.

@@ -25,7 +25,6 @@ server-supplied URLs held to public addresses. The
 | Item | Why | Size | How it is tested |
 |---|---|---|---|
 | FIDO over NFC | Security keys through an NFC reader, over the existing PC/SC support | S–M | Real keys by hand (needs a reader) |
-| OpenPGP card signing and decryption | Card operations that need the PIN; no key generation | M | Emulated card in the unit tests; real cards by hand |
 
 ## On request
 

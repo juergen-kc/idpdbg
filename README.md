@@ -138,7 +138,7 @@ What each group covers:
 | [`tls`](docs/reference/tls.md) | Versions, cipher, ALPN, chain trust, OCSP stapling, client certificates, mutual TLS, LDAP and SMTP StartTLS |
 | [`webauthn`](docs/reference/webauthn.md) | Decode ceremonies; register and sign in against a relying party with a software authenticator or a real security key; `--tamper` negative tests |
 | [`fido`](docs/reference/fido.md) | Connected security keys, CTAP2 authenticatorGetInfo, the passkeys a key stores (list and delete, CTAP 2.1 credential management), FIDO Metadata Service (MDS3) lookups |
-| [`card`](docs/reference/card.md) | Read cards and YubiKeys over PC/SC; decode APDUs, PIV and OpenPGP objects; generate a PIV key on the card and import its certificate |
+| [`card`](docs/reference/card.md) | Read cards and YubiKeys over PC/SC; decode APDUs, PIV and OpenPGP objects; generate a PIV key on the card and import its certificate; sign, authenticate and decrypt with an OpenPGP card, checked against its public key and fingerprint |
 | [`oath`](docs/reference/oath.md), [`yubico`](docs/reference/yubico.md) | HOTP and TOTP codes; Yubico OTP decoding and checks |
 | [`spiffe`](docs/reference/spiffe.md) | SPIFFE IDs, X509- and JWT-SVIDs, trust bundles, the Workload API |
 | [`spire`](docs/reference/spire.md) | The SPIRE Server API over the admin socket or mTLS: server, CA and bundle state, entries, agents, federation; minting checked SVIDs; creating and deleting entries and join tokens |

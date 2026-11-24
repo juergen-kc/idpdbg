@@ -129,8 +129,14 @@ func (p *pivCard) Close() error { return p.conn.Close() }
 
 // apdu sends one command, chaining data over 255 bytes (ISO 7816-4 §5.1.1).
 func (p *pivCard) apdu(ins, p1, p2 byte, data []byte) ([]byte, uint16, error) {
+	return cardAPDU(p.conn, ins, p1, p2, data)
+}
+
+// cardAPDU sends one command, chaining data over 255 bytes (ISO 7816-4
+// §5.1.1), and collects the whole answer.
+func cardAPDU(conn cardConn, ins, p1, p2 byte, data []byte) ([]byte, uint16, error) {
 	for len(data) > 255 {
-		_, sw, err := transmit(p.conn, append([]byte{0x10, ins, p1, p2, 255}, data[:255]...))
+		_, sw, err := transmit(conn, append([]byte{0x10, ins, p1, p2, 255}, data[:255]...))
 		if err != nil {
 			return nil, 0, err
 		}
@@ -143,7 +149,7 @@ func (p *pivCard) apdu(ins, p1, p2 byte, data []byte) ([]byte, uint16, error) {
 	if len(data) > 0 {
 		cmd = append(append(cmd, byte(len(data))), data...)
 	}
-	return transmit(p.conn, append(cmd, 0x00))
+	return transmit(conn, append(cmd, 0x00))
 }
 
 // pinRetries asks how many PIN attempts are left without spending one.

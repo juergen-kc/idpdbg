@@ -23,7 +23,7 @@ Every operation runs as `idpdbg <group> <operation> [--param value ...]` and as 
 | [tls](tls.md) — TLS servers | [`probe`](tls.md#tls-probe) |
 | [webauthn](webauthn.md) — WebAuthn and passkeys | [`decode`](webauthn.md#webauthn-decode), [`register`](webauthn.md#webauthn-register), [`login`](webauthn.md#webauthn-login) |
 | [fido](fido.md) — FIDO security keys | [`credentials`](fido.md#fido-credentials), [`credential_delete`](fido.md#fido-credential_delete), [`devices`](fido.md#fido-devices), [`info`](fido.md#fido-info), [`metadata`](fido.md#fido-metadata) |
-| [card](card.md) — Smart cards, PIV and OpenPGP tokens | [`read`](card.md#card-read), [`apdu`](card.md#card-apdu), [`piv`](card.md#card-piv), [`openpgp`](card.md#card-openpgp), [`piv_generate`](card.md#card-piv_generate), [`piv_import`](card.md#card-piv_import) |
+| [card](card.md) — Smart cards, PIV and OpenPGP tokens | [`read`](card.md#card-read), [`apdu`](card.md#card-apdu), [`piv`](card.md#card-piv), [`openpgp`](card.md#card-openpgp), [`openpgp_sign`](card.md#card-openpgp_sign), [`openpgp_decrypt`](card.md#card-openpgp_decrypt), [`piv_generate`](card.md#card-piv_generate), [`piv_import`](card.md#card-piv_import) |
 | [oath](oath.md) — OATH one-time passwords | [`code`](oath.md#oath-code) |
 | [yubico](yubico.md) — Yubico OTP | [`otp`](yubico.md#yubico-otp) |
 | [spiffe](spiffe.md) — SPIFFE workload identity | [`id`](spiffe.md#spiffe-id), [`svid`](spiffe.md#spiffe-svid), [`bundle`](spiffe.md#spiffe-bundle), [`fetch`](spiffe.md#spiffe-fetch) |
@@ -66,6 +66,7 @@ A secret parameter falls back to the environment variable `IDPDBG_` plus its nam
 - `--piv-pin` → `IDPDBG_PIV_PIN`
 - `--pin` → `IDPDBG_PIN`
 - `--credential` → `IDPDBG_CREDENTIAL`
+- `--openpgp-pin` → `IDPDBG_OPENPGP_PIN`
 - `--management-key` → `IDPDBG_MANAGEMENT_KEY`
 - `--uri` → `IDPDBG_URI`
 - `--aes-key` → `IDPDBG_AES_KEY`
