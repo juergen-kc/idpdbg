@@ -14,6 +14,8 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-24
+
 ### Added
 - Post-quantum certificates with ML-DSA (FIPS 204, RFC 9881): `pki decode`,
   `pki verify` and `tls probe` name ML-DSA-44/65/87 keys and signatures and
@@ -720,7 +722,8 @@ tests:
 - Profiles and environment variables for secrets, with stored secrets bound
   to the hosts they belong to. MCP callers can't read local files.
 
-[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.31.0...HEAD
+[Unreleased]: https://github.com/juergen-kc/idpdbg/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/juergen-kc/idpdbg/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/juergen-kc/idpdbg/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/juergen-kc/idpdbg/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/juergen-kc/idpdbg/compare/v0.28.0...v0.29.0
