@@ -134,8 +134,8 @@ What each group covers:
 | [`ldap`](docs/reference/ldap.md) | Root DSE, bind, paged search with Active Directory attributes decoded, writes, compare, password change and reset (RFC 3062, or `unicodePwd` on AD) |
 | [`krb`](docs/reference/krb.md) | kinit, service tickets with PAC verification, keytabs, message decoding, S4U constrained delegation (classic and resource-based), FAST, PKINIT with a key file or a PIV smart card; KDCs found through DNS SRV |
 | [`spnego`](docs/reference/spnego.md) | Negotiate sign-on to a web resource: offered schemes, NTLM fallback, mutual authentication |
-| [`pki`](docs/reference/pki.md) | Certificate, chain, CSR and CRL decoding, chain verification, a throwaway test CA, leaf issuance, OCSP and CRL revocation checks |
-| [`tls`](docs/reference/tls.md) | Versions, cipher, ALPN, chain trust, OCSP stapling, client certificates, mutual TLS, LDAP and SMTP StartTLS |
+| [`pki`](docs/reference/pki.md) | Certificate, chain, CSR and CRL decoding, chain verification, a throwaway test CA, leaf issuance, OCSP and CRL revocation checks; post-quantum ML-DSA keys and signatures |
+| [`tls`](docs/reference/tls.md) | Versions, cipher, key exchange (post-quantum or not), ALPN, chain trust, OCSP stapling, client certificates, mutual TLS, LDAP and SMTP StartTLS |
 | [`webauthn`](docs/reference/webauthn.md) | Decode ceremonies; register and sign in against a relying party with a software authenticator or a real security key; `--tamper` negative tests |
 | [`fido`](docs/reference/fido.md) | Security keys over USB or an NFC reader, CTAP2 authenticatorGetInfo, the passkeys a key stores (list and delete, CTAP 2.1 credential management), FIDO Metadata Service (MDS3) lookups |
 | [`card`](docs/reference/card.md) | Read cards and YubiKeys over PC/SC; decode APDUs, PIV and OpenPGP objects; generate a PIV key on the card and import its certificate; sign, authenticate and decrypt with an OpenPGP card, checked against its public key and fingerprint |

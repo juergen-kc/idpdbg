@@ -42,8 +42,8 @@ Legacy or niche: planned when someone needs them.
 - Indirect CRLs
 - SPIRE: banning and deleting agents, CA rotation (prepare, activate,
   taint, revoke), and changing federation relationships and bundles
-- Post-quantum certificates: decoding first, once Go's standard library
-  supports ML-DSA in certificates
+- Composite (hybrid ML-DSA plus classical) and SLH-DSA certificates, once
+  Go's standard library supports them
 - Security keys on Windows, through Windows' own WebAuthn API (Windows lets
   only administrators talk to keys directly)
 - The Digital Credentials API: it is a browser API, so idpdbg could at most

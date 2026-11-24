@@ -14,6 +14,22 @@ as the release notes, and refuses a tag without one.
 
 ## [Unreleased]
 
+### Added
+- Post-quantum certificates with ML-DSA (FIPS 204, RFC 9881): `pki decode`,
+  `pki verify` and `tls probe` name ML-DSA-44/65/87 keys and signatures and
+  check that an ML-DSA key's usage only signs; `pki ca` and `pki issue`
+  make ML-DSA keys (`--key-type`/`--ca-key-type ml-dsa-44`, `-65`, `-87`).
+  Tested with idpdbg's own chains served over TLS 1.3, and with an ML-DSA
+  chain and CSR made by OpenSSL 4.1.
+- `tls probe` shows the negotiated key exchange and says whether it is
+  post-quantum (X25519MLKEM768 and the other ML-KEM hybrids), and why an
+  ML-DSA server offers no TLS 1.2.
+
+### Changed
+- When a TLS server ends the handshake without a reason, `tls probe` now
+  also names an ML-DSA-signed chain as a cause: Go's TLS client does not
+  list ML-DSA in `signature_algorithms_cert`, and OpenSSL then refuses.
+
 ## [0.31.0] - 2026-11-24
 
 ### Added

@@ -45,7 +45,7 @@ MCP tool: `pki_ca`.
 |---|---|---|
 | `--levels` | int | CA levels: 1 (root signs leaves), 2 (root and issuing CA) or 3 (root, intermediate, issuing). Default `3`. |
 | `--root-cn` | string | Root CA common name. Default `idpdbg Test Root CA`. |
-| `--ca-key-type` | string | Key algorithm for the CAs. Default `ecdsa-p384`. One of `ecdsa-p256`, `ecdsa-p384`, `rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`. |
+| `--ca-key-type` | string | Key algorithm for the CAs. Default `ecdsa-p384`. One of `ecdsa-p256`, `ecdsa-p384`, `rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`, `ml-dsa-44`, `ml-dsa-65`, `ml-dsa-87`. |
 | `--permitted-dns` | list | Name constraint: DNS domains the issuing CA may issue for. |
 | `--out-dir` | string | CLI only: write the PEM files here (existing files are never overwritten). |
 | `--cn` | string | Subject common name. Default `localhost`. |
@@ -56,7 +56,7 @@ MCP tool: `pki_ca`.
 | `--uris` | list | URI subjectAltNames, e.g. spiffe://example.org/workload. |
 | `--usage` | string | Extended key usage. Default `server`. One of `server`, `client`, `both`, `email`, `code`. |
 | `--validity-days` | int | Lifetime in days. Default `90`. |
-| `--key-type` | string | Key algorithm. Default `ecdsa-p256`. One of `ecdsa-p256`, `ecdsa-p384`, `rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`. |
+| `--key-type` | string | Key algorithm. Default `ecdsa-p256`. One of `ecdsa-p256`, `ecdsa-p384`, `rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`, `ml-dsa-44`, `ml-dsa-65`, `ml-dsa-87`. |
 | `--crl-urls` | list | CRL distribution point URLs. |
 | `--ocsp-urls` | list | OCSP responder URLs (authorityInfoAccess). |
 | `--ca-issuers-urls` | list | caIssuers URLs (authorityInfoAccess). |
@@ -84,7 +84,7 @@ MCP tool: `pki_issue`.
 | `--uris` | list | URI subjectAltNames, e.g. spiffe://example.org/workload. |
 | `--usage` | string | Extended key usage. Default `server`. One of `server`, `client`, `both`, `email`, `code`. |
 | `--validity-days` | int | Lifetime in days. Default `90`. |
-| `--key-type` | string | Key algorithm. Default `ecdsa-p256`. One of `ecdsa-p256`, `ecdsa-p384`, `rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`. |
+| `--key-type` | string | Key algorithm. Default `ecdsa-p256`. One of `ecdsa-p256`, `ecdsa-p384`, `rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`, `ml-dsa-44`, `ml-dsa-65`, `ml-dsa-87`. |
 | `--crl-urls` | list | CRL distribution point URLs. |
 | `--ocsp-urls` | list | OCSP responder URLs (authorityInfoAccess). |
 | `--ca-issuers-urls` | list | caIssuers URLs (authorityInfoAccess). |

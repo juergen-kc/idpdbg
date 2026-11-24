@@ -139,6 +139,9 @@ func handshake(c *Ctx, t *probeTarget, cfg *tls.Config) (tls.ConnectionState, fu
 	return conn.ConnectionState(), func() { conn.Close() }, nil
 }
 
+// pqKeyExchange are the TLS 1.3 groups with ML-KEM in them.
+var pqKeyExchange = map[tls.CurveID]bool{tls.X25519MLKEM768: true, tls.SecP256r1MLKEM768: true, tls.SecP384r1MLKEM1024: true, tls.MLKEM1024: true}
+
 var tlsVersions = []struct {
 	v    uint16
 	name string
@@ -208,7 +211,8 @@ func runTLSProbe(c *Ctx) (M, error) {
 	}
 	if !cs.ok(herr == nil, "handshake", detailOr(herr, "completed"), "RFC 8446 §4") {
 		if msg := herr.Error(); !req.Requested && (strings.Contains(msg, "EOF") || strings.Contains(msg, "protocol version") || strings.Contains(msg, "handshake failure")) {
-			cs.add("handshake failure cause", "info", "the server ended the handshake without saying why; usually it only offers legacy TLS versions or cipher suites (TLS 1.0, RC4, 3DES, finite-field DHE) that this client no longer implements. Cross-check with: openssl s_client -connect "+net.JoinHostPort(t.Host, t.Port)+" -tls1", "RFC 8996")
+			cs.add("handshake failure cause", "info", "the server ended the handshake without saying why. Usually it only offers legacy TLS versions or cipher suites (TLS 1.0, RC4, 3DES, finite-field DHE) that this client no longer implements; cross-check with: openssl s_client -connect "+net.JoinHostPort(t.Host, t.Port)+" -tls1. "+
+				"Or its certificate chain is signed with ML-DSA: Go's TLS client (which idpdbg uses) offers ML-DSA for the handshake signature but not in signature_algorithms_cert, and OpenSSL then refuses; cross-check with: openssl s_client -connect "+net.JoinHostPort(t.Host, t.Port)+" -tls1_3", "RFC 8996, RFC 8446 §4.2.3")
 		}
 		if len(st.PeerCertificates) == 0 {
 			return out, nil
@@ -216,6 +220,16 @@ func runTLSProbe(c *Ctx) (M, error) {
 	}
 	out["version"] = tls.VersionName(st.Version)
 	out["cipher_suite"] = tls.CipherSuiteName(st.CipherSuite)
+	if st.CurveID != 0 {
+		out["key_exchange"] = st.CurveID.String()
+		if st.Version >= tls.VersionTLS13 {
+			if pqKeyExchange[st.CurveID] {
+				cs.add("post-quantum key exchange", "pass", st.CurveID.String()+": recorded traffic stays confidential against a future quantum computer", "draft-ietf-tls-ecdhe-mlkem")
+			} else {
+				cs.add("post-quantum key exchange", "info", st.CurveID.String()+" only, although idpdbg offered X25519MLKEM768: traffic recorded today could be decrypted by a future quantum computer", "draft-ietf-tls-ecdhe-mlkem")
+			}
+		}
+	}
 	if st.NegotiatedProtocol != "" {
 		out["alpn"] = st.NegotiatedProtocol
 	}
@@ -342,6 +356,8 @@ func runTLSProbe(c *Ctx) (M, error) {
 				cs.add(v.name+" refused", "warn", v.name+" is accepted; it is deprecated", "RFC 8996")
 			case v.v <= tls.VersionTLS11:
 				cs.add(v.name+" refused", "pass", "", "RFC 8996")
+			case v.v == tls.VersionTLS12 && !ok && len(st.PeerCertificates) > 0 && st.PeerCertificates[0].PublicKeyAlgorithm == x509.MLDSA:
+				cs.add("TLS 1.2 not offered", "info", "the server's certificate has an ML-DSA key, which TLS signs with only in TLS 1.3", "draft-ietf-tls-mldsa")
 			case v.v == tls.VersionTLS13:
 				cs.add("TLS 1.3 supported", map[bool]string{true: "pass", false: "info"}[ok], map[bool]string{true: "accepted", false: "not offered: the server stops at TLS 1.2"}[ok], "RFC 8446")
 			}

@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -22,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -57,6 +59,8 @@ func keyDescription(pub any) string {
 		return "ECDSA " + k.Curve.Params().Name
 	case ed25519.PublicKey:
 		return "Ed25519"
+	case *mldsa.PublicKey:
+		return k.Parameters().String()
 	}
 	return fmt.Sprintf("%T", pub)
 }
@@ -181,6 +185,7 @@ func certChecks(cs *Checks, c *x509.Certificate, role string) {
 	if k, ok := c.PublicKey.(*rsa.PublicKey); ok && k.N.BitLen() < 2048 {
 		cs.add(who+": key size", "fail", fmt.Sprintf("RSA %d bits", k.N.BitLen()), "NIST SP 800-131A")
 	}
+	mldsaChecks(cs, c, who)
 	switch c.SignatureAlgorithm {
 	case x509.MD5WithRSA, x509.SHA1WithRSA, x509.ECDSAWithSHA1, x509.DSAWithSHA1:
 		if role == "root" {
@@ -210,6 +215,33 @@ func certChecks(cs *Checks, c *x509.Certificate, role string) {
 		if c.KeyUsage != 0 {
 			cs.ok(c.KeyUsage&x509.KeyUsageCertSign != 0, who+": keyUsage includes keyCertSign", "", "RFC 5280 §4.2.1.3")
 		}
+	}
+}
+
+// mldsaChecks applies RFC 9881 to ML-DSA keys and signatures: an ML-DSA key
+// only signs, so its key usage may not include encipherment or key
+// agreement, and needs at least one signing bit.
+func mldsaChecks(cs *Checks, c *x509.Certificate, who string) {
+	const ref = "RFC 9881 §5"
+	if k, ok := c.PublicKey.(*mldsa.PublicKey); ok {
+		cs.add(who+": post-quantum key", "info", k.Parameters().String()+" (FIPS 204), a "+fmt.Sprint(len(k.Bytes()))+"-byte public key", ref)
+		if c.KeyUsage != 0 {
+			bad := []string{}
+			for bit, name := range map[x509.KeyUsage]string{x509.KeyUsageKeyEncipherment: "keyEncipherment", x509.KeyUsageDataEncipherment: "dataEncipherment",
+				x509.KeyUsageKeyAgreement: "keyAgreement", x509.KeyUsageEncipherOnly: "encipherOnly", x509.KeyUsageDecipherOnly: "decipherOnly"} {
+				if c.KeyUsage&bit != 0 {
+					bad = append(bad, name)
+				}
+			}
+			sort.Strings(bad)
+			cs.ok(len(bad) == 0, who+": ML-DSA key usage only signs", strings.Join(bad, ", "), ref)
+			sign := x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment | x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+			cs.ok(c.KeyUsage&sign != 0, who+": ML-DSA key usage has a signing bit", "digitalSignature, nonRepudiation, keyCertSign or cRLSign", ref)
+		}
+	}
+	switch c.SignatureAlgorithm {
+	case x509.MLDSA44, x509.MLDSA65, x509.MLDSA87:
+		cs.add(who+": post-quantum signature", "info", c.SignatureAlgorithm.String()+", "+fmt.Sprint(len(c.Signature))+" bytes", ref)
 	}
 }
 
@@ -467,11 +499,17 @@ func generateKey(kind string) (crypto.Signer, error) {
 	case "ed25519":
 		_, k, err := ed25519.GenerateKey(rand.Reader)
 		return k, err
+	case "ml-dsa-44":
+		return mldsa.GenerateKey(mldsa.MLDSA44())
+	case "ml-dsa-65":
+		return mldsa.GenerateKey(mldsa.MLDSA65())
+	case "ml-dsa-87":
+		return mldsa.GenerateKey(mldsa.MLDSA87())
 	}
 	return nil, fmt.Errorf("unknown key_type %q", kind)
 }
 
-var keyTypes = []string{"ecdsa-p256", "ecdsa-p384", "rsa-2048", "rsa-3072", "rsa-4096", "ed25519"}
+var keyTypes = []string{"ecdsa-p256", "ecdsa-p384", "rsa-2048", "rsa-3072", "rsa-4096", "ed25519", "ml-dsa-44", "ml-dsa-65", "ml-dsa-87"}
 
 func serialNumber() *big.Int {
 	n, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
